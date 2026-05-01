@@ -124,13 +124,22 @@ async function carregarDadosAluno(user){
   carregarCrono();
   carregarOutrasProvas();
   carregarCalendario();
+
+  // Atualizar header com nome e objetivo
+  const headerNome = document.getElementById('header-nome');
+  const headerObj = document.getElementById('header-objetivo');
+  if(headerNome) headerNome.textContent = alunoData.nome||'';
+  if(headerObj) headerObj.textContent = alunoData.objetivo||'';
+
   renderGeral();
-  // Selecionar todos os simulados automaticamente
+
+  // Selecionar todos os simulados e renderizar gráfico
   setTimeout(()=>{
-    const btnTodos = document.querySelector('.sel-btn[onclick*="vgSelAll(true)"], button[onclick*="vgSelTodos"]');
-    if(btnTodos) btnTodos.click();
-    else renderGeralData();
-  }, 100);
+    const checks = document.querySelectorAll('.sim-check-item');
+    checks.forEach(ch=>ch.classList.add('checked'));
+    document.querySelectorAll('#vg-check-grid input[type=checkbox]').forEach(cb=>cb.checked=true);
+    renderGeralData();
+  }, 200);
 }
 
 // ── SALVAR ERROS NO BANCO ────────────────────────────────────
