@@ -2512,6 +2512,15 @@ async function criarAcessoAluno(alunoId, email, senha){
         .eq('id', alunoId);
     }
 
+    // 3. Vincular user_id via função SQL segura (bypassa RLS)
+    if(signUpData?.user?.id){
+      await supa.rpc('vincular_meu_userid', {
+        p_email: email,
+        p_user_id: signUpData.user.id
+      });
+      alunos.find(a=>a.id===alunoId) && (alunos.find(a=>a.id===alunoId).user_id = signUpData.user.id);
+    }
+
     const linkAluno = 'https://channelnobreak-lab.github.io/mentoria-alisson/dashboard_aluno_ONLINE.html';
     alert(`✅ Acesso criado!\n\nLink: ${linkAluno}\nEmail: ${email}\nSenha: ${senha}\n\nEnvie essas informações ao aluno pelo WhatsApp.`);
 
@@ -2591,6 +2600,12 @@ async function criarTodosAcessos(){
         .eq('professor_id', professorId);
 
       if(updateError) throw new Error(updateError.message);
+
+      // Vincular user_id via função SQL segura (bypassa RLS)
+      await supa.rpc('vincular_meu_userid', {
+        p_email: email,
+        p_user_id: signUpData?.user?.id || '00000000-0000-0000-0000-000000000000'
+      });
 
       // Atualizar array local
       alunos[i].email = email;
