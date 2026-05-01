@@ -23,6 +23,7 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
 
 let supaAlunoId = null;
 let supaMode = false;
+window._supaOnlineMode = true; // Bloquear o INIT local — dados vêm do Supabase
 
 // ── TELA DE LOGIN DO ALUNO ───────────────────────────────────
 function mostrarLoginAluno(){
@@ -128,8 +129,8 @@ async function carregarDadosAluno(user){
   // Atualizar header com nome e objetivo
   const headerNome = document.getElementById('header-nome');
   const headerObj = document.getElementById('header-objetivo');
-  if(headerNome) headerNome.textContent = alunoData.nome||'';
-  if(headerObj) headerObj.textContent = alunoData.objetivo||'';
+  if(headerNome) headerNome.textContent = alunoData?.nome||'';
+  if(headerObj) headerObj.textContent = alunoData?.objetivo||'';
 
   renderGeral();
 
