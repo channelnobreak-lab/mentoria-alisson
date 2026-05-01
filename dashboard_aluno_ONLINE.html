@@ -12,12 +12,20 @@ const SUPA_URL = 'https://fexolxibpttxncezuolr.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZleG9seGlicHR0eG5jZXp1b2xyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MzQwNTEsImV4cCI6MjA5MzAxMDA1MX0.hYqwMDkFTCiof_vnGqND8rKM21WX0Ro-Hz6D9dszT28';
 // Bloquear INIT local — dados virão do Supabase
 window._supaOnlineMode = true;
+// Wrapper de storage compatível com Safari iOS
+const _safeStorage = {
+  getItem: (k) => { try { return localStorage.getItem(k); } catch(e) { return null; } },
+  setItem: (k, v) => { try { localStorage.setItem(k, v); } catch(e) {} },
+  removeItem: (k) => { try { localStorage.removeItem(k); } catch(e) {} }
+};
+
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY, {
   auth: {
     persistSession: true,
     storageKey: 'mentoria-aluno-auth',
-    storage: window.localStorage,
-    autoRefreshToken: true
+    storage: _safeStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: false
   }
 });
 
@@ -42,6 +50,10 @@ async function fazerLoginAluno(){
     if(error) throw new Error(error.message);
     await carregarDadosAluno(data.user);
     document.getElementById('tela-login-aluno').style.display='none';
+    const _btnSair=document.getElementById('btn-sair-aluno');
+    if(_btnSair) _btnSair.style.display='inline-block';
+    const btnSair=document.getElementById('btn-sair-aluno');
+    if(btnSair) btnSair.style.display='inline-block';
   }catch(e){
     erro.textContent=e.message==='Invalid login credentials'?'Email ou senha incorretos.':e.message;
     erro.style.display='block';
@@ -144,6 +156,13 @@ async function carregarDadosAluno(user){
 }
 
 // ── SALVAR ERROS NO BANCO ────────────────────────────────────
+async function sairAluno(){
+  if(confirm('Deseja sair do dashboard?')){
+    await supa.auth.signOut();
+    window.location.reload();
+  }
+}
+
 async function salvarErrosSupabase(){
   if(!supaMode||!supaAlunoId) return;
   try{
@@ -179,6 +198,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   if(session){
     await carregarDadosAluno(session.user);
     document.getElementById('tela-login-aluno').style.display='none';
+    const _bs=document.getElementById('btn-sair-aluno');
+    if(_bs) _bs.style.display='inline-block';
   } else {
     mostrarLoginAluno();
   }
@@ -479,6 +500,7 @@ tr:hover td{background:var(--bg);}
   <button class="btn-sm" onclick="salvarDados()" title="Salva todos os seus erros num arquivo .json no seu computador">💾 Salvar erros</button>
   <label class="btn-sm" style="cursor:pointer" title="Carrega um arquivo de erros salvo anteriormente">📂 Carregar erros<input type="file" accept=".json" onchange="carregarDados(event)" style="display:none"></label>
   <button class="btn-sm primary" id="btn-exportar-prof" onclick="exportarParaProfessor()" style="display:none" title="Gera um arquivo para enviar ao Prof. Alisson">📤 Exportar para o professor</button>
+  <button class="btn-sm" id="btn-sair-aluno" onclick="sairAluno()" style="display:none;font-size:11px;color:var(--muted)">↩ Sair</button>
   <span id="dados-status" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
 </div>
 <div class="main">
