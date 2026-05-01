@@ -77,8 +77,11 @@ async function carregarDadosAluno(user){
     if(alunoEmail){
       alunoData = alunoEmail;
       error = null;
-      // Vincular user_id para próximos logins
-      await supa.from('alunos').update({ user_id: user.id }).eq('id', alunoData.id);
+      // Vincular user_id via função SQL segura (SECURITY DEFINER — bypassa RLS)
+      await supa.rpc('vincular_meu_userid', {
+        p_email: user.email,
+        p_user_id: user.id
+      });
     }
   }
 
