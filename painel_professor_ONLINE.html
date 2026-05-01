@@ -418,6 +418,7 @@ tr:hover td{background:var(--bg);}
         <button class="painel-nav-btn" onclick="showOverviewTab('mapa-erros',this)">Mapa de erros</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('alertas',this)">⚠ Alertas</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('alunos-cadastrados',this)">Alunos cadastrados</button>
+        <button class="painel-nav-btn" onclick="showOverviewTab('acessos',this)">🔐 Acessos</button>
       </div>
 
       <!-- GERAL -->
@@ -531,6 +532,31 @@ tr:hover td{background:var(--bg);}
       <!-- ALERTAS -->
       <div id="ov-alertas" class="painel-section">
         <div id="alertas-content"></div>
+      </div>
+
+      <!-- ACESSOS -->
+      <div id="ov-acessos" class="painel-section">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="card-title" style="margin-bottom:4px">🔐 Gerenciar acessos dos alunos</div>
+              <div style="font-size:12px;color:var(--muted)">Cadastre email e senha para cada aluno acessar o dashboard online. Deixe em branco os que não precisam de acesso ainda.</div>
+            </div>
+            <button class="btn btn-primary" onclick="criarTodosAcessos()">✅ Criar todos os acessos</button>
+          </div>
+          <div id="acessos-log" style="display:none;background:var(--surface2);border-radius:8px;padding:12px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;margin-bottom:14px;white-space:pre-wrap"></div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th>Aluno</th>
+                <th>Status</th>
+                <th>Email</th>
+                <th>Senha</th>
+              </tr></thead>
+              <tbody id="acessos-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- ALUNOS CADASTRADOS -->
@@ -1110,6 +1136,7 @@ function showOverviewTab(id, btn){
     if(id==='mapa-erros') renderMapaErros();
     if(id==='alertas') renderAlertas();
     if(id==='alunos-cadastrados') renderAlunosCadastrados();
+    if(id==='acessos') renderAcessos();
   });
 }
 
@@ -2495,6 +2522,114 @@ async function criarAcessoAluno(alunoId, email, senha){
   }catch(e){
     console.error('Erro ao criar acesso:', e);
     alert('Erro ao criar acesso: ' + e.message);
+  }
+}
+
+// ── GERENCIAR ACESSOS ─────────────────────────────────────────
+function renderAcessos(){
+  const tbody = document.getElementById('acessos-tbody');
+  if(!tbody) return;
+  tbody.innerHTML = alunos.map((a,i) => {
+    const temAcesso = a.email && a.email !== '';
+    const status = temAcesso
+      ? `<span style="color:#1A6B5C;font-size:11px">✓ ${a.email}</span>`
+      : `<span style="color:var(--muted);font-size:11px">Sem acesso</span>`;
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap">${a.nome}</td>
+      <td>${status}</td>
+      <td><input type="email" id="ac-email-${i}" placeholder="email@exemplo.com" value="${a.email||''}"
+        style="width:100%;padding:5px 8px;border:1px solid var(--border2);border-radius:5px;font-size:12px;font-family:var(--font-body)"></td>
+      <td><input type="text" id="ac-senha-${i}" placeholder="senha" value="${!temAcesso?'enem2025':''}"
+        style="width:100%;padding:5px 8px;border:1px solid var(--border2);border-radius:5px;font-size:12px;font-family:var(--font-body)"></td>
+    </tr>`;
+  }).join('');
+}
+
+async function criarTodosAcessos(){
+  const log = document.getElementById('acessos-log');
+  log.style.display='block';
+  log.textContent = 'Iniciando criação de acessos...\n';
+
+  const linkAluno = 'https://channelnobreak-lab.github.io/mentoria-alisson/dashboard_aluno_ONLINE.html';
+  let criados=0, ignorados=0, erros=0;
+
+  for(let i=0; i<alunos.length; i++){
+    const a = alunos[i];
+    const email = document.getElementById(`ac-email-${i}`)?.value.trim();
+    const senha = document.getElementById(`ac-senha-${i}`)?.value.trim();
+
+    if(!email || !senha){
+      log.textContent += `⏭ ${a.nome}: ignorado (sem email/senha)\n`;
+      ignorados++;
+      continue;
+    }
+
+    // Se já tem acesso com esse email, pular
+    if(a.email === email && a.user_id){
+      log.textContent += `✓ ${a.nome}: já tem acesso (${email})\n`;
+      ignorados++;
+      continue;
+    }
+
+    log.textContent += `⏳ ${a.nome}: criando acesso...\n`;
+    log.scrollTop = log.scrollHeight;
+
+    try{
+      // Criar conta
+      const { data: signUpData, error: signUpError } = await supa.auth.signUp({ email, password: senha });
+      if(signUpError && !signUpError.message.includes('already registered')){
+        throw new Error(signUpError.message);
+      }
+
+      // Salvar email (e user_id se disponível)
+      const updatePayload = { email };
+      if(signUpData?.user?.id) updatePayload.user_id = signUpData.user.id;
+
+      const { error: updateError } = await supa.from('alunos')
+        .update(updatePayload)
+        .eq('id', a.id)
+        .eq('professor_id', professorId);
+
+      if(updateError) throw new Error(updateError.message);
+
+      // Atualizar array local
+      alunos[i].email = email;
+      if(signUpData?.user?.id) alunos[i].user_id = signUpData.user.id;
+
+      log.textContent += `✅ ${a.nome}: acesso criado (${email} / ${senha})\n`;
+      criados++;
+    }catch(e){
+      log.textContent += `❌ ${a.nome}: erro — ${e.message}\n`;
+      erros++;
+    }
+    log.scrollTop = log.scrollHeight;
+
+    // Pequena pausa para não sobrecarregar a API
+    await new Promise(r=>setTimeout(r,300));
+  }
+
+  log.textContent += `
+── Concluído: ${criados} criados, ${ignorados} ignorados, ${erros} erros ──
+`;
+  log.textContent += `
+Link para os alunos:
+${linkAluno}
+`;
+  log.scrollTop = log.scrollHeight;
+
+  // Vincular user_ids via SQL (para os que não vieram no signUp)
+  await supaVincularUserIds();
+
+  // Atualizar tabela
+  renderAcessos();
+}
+
+async function supaVincularUserIds(){
+  // Chamada RPC para vincular emails → user_ids no banco
+  try{
+    await supa.rpc('vincular_user_ids_alunos');
+  }catch(e){
+    console.warn('RPC vincular_user_ids não disponível:', e.message);
   }
 }
 
