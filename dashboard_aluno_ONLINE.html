@@ -125,6 +125,12 @@ async function carregarDadosAluno(user){
   carregarOutrasProvas();
   carregarCalendario();
   renderGeral();
+  // Selecionar todos os simulados automaticamente
+  setTimeout(()=>{
+    const btnTodos = document.querySelector('.sel-btn[onclick*="vgSelAll(true)"], button[onclick*="vgSelTodos"]');
+    if(btnTodos) btnTodos.click();
+    else renderGeralData();
+  }, 100);
 }
 
 // ── SALVAR ERROS NO BANCO ────────────────────────────────────
