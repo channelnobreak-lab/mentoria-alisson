@@ -82,6 +82,12 @@ async function carregarDadosAluno(user){
         p_email: user.email,
         p_user_id: user.id
       });
+      // Recarregar com user_id agora vinculado para garantir acesso completo via RLS
+      const { data: alunoAtualizado } = await supa.from('alunos')
+        .select('*, simulados(*), redacoes(*), erros(*), outras_provas(*)')
+        .eq('user_id', user.id)
+        .single();
+      if(alunoAtualizado) alunoData = alunoAtualizado;
     }
   }
 
