@@ -2541,8 +2541,9 @@ function adicionarErro(){
   document.getElementById('err-conteudo').innerHTML='<option value="">— selecione o módulo —</option>';
   document.getElementById('err-obs').value='';
   renderErros();
+  if(typeof salvarErrosSupabase === 'function') salvarErrosSupabase();
 }
-function excluirErro(i){if(!confirm('Excluir?'))return;erros.splice(i,1);renderErros();}
+function excluirErro(i){if(!confirm('Excluir?'))return;erros.splice(i,1);renderErros();if(typeof salvarErrosSupabase === 'function') salvarErrosSupabase();}
 
 function renderErros(){
   buildSimSelect('filtro-sim-err',true);
