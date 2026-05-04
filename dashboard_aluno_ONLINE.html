@@ -1923,6 +1923,8 @@ async function carregarCrono(){
         quinzenaDias = data.quinzena_dias||[];
         cronograma = data.cronograma||[];
         cronoDataInicio = data.data_inicio||null;
+        // Renderizar após carregar
+        setTimeout(()=>{ if(typeof renderCronoDias==='function') renderCronoDias(); }, 100);
         return;
       }
     }catch(e){ console.warn('Erro carregarCrono:', e); }
