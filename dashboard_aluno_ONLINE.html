@@ -143,7 +143,7 @@ async function carregarDadosAluno(user){
   // Inicializar e renderizar
   initErrosSelects();
   buildSimSelect('err-simulado');
-  carregarCrono();
+  await carregarCrono();
   carregarOutrasProvas();
   carregarCalendario();
 
@@ -1895,9 +1895,37 @@ function _setItem(k,v){try{localStorage.setItem(k,v);}catch(e){_store[k]=v;}}
 function _getItem(k){try{return localStorage.getItem(k);}catch(e){return _store[k]||null;}}
 
 function salvarCrono(){
+  // Salvar localmente
   try{_setItem('crono_'+config.nome,JSON.stringify({quinzenaDias,cronograma,cronoDataInicio}));}catch(e){}
+  // Salvar no banco se online
+  if(supaMode && supaAlunoId){
+    supa.from('cronogramas').upsert({
+      aluno_id: supaAlunoId,
+      quinzena_dias: quinzenaDias,
+      cronograma: cronograma,
+      data_inicio: cronoDataInicio,
+      atualizado_em: new Date().toISOString()
+    }, {onConflict: 'aluno_id'}).then(({error})=>{
+      if(error) console.warn('Erro ao salvar cronograma:', error.message);
+    });
+  }
 }
-function carregarCrono(){
+async function carregarCrono(){
+  // Tentar carregar do banco primeiro se online
+  if(supaMode && supaAlunoId){
+    try{
+      const {data} = await supa.from('cronogramas')
+        .select('quinzena_dias,cronograma,data_inicio')
+        .eq('aluno_id', supaAlunoId).single();
+      if(data){
+        quinzenaDias = data.quinzena_dias||[];
+        cronograma = data.cronograma||[];
+        cronoDataInicio = data.data_inicio||null;
+        return;
+      }
+    }catch(e){}
+  }
+  // Fallback: localStorage
   try{
     const saved=_getItem('crono_'+config.nome);
     if(saved){const d=JSON.parse(saved);quinzenaDias=d.quinzenaDias||[];cronograma=d.cronograma||[];cronoDataInicio=d.cronoDataInicio||null;}
