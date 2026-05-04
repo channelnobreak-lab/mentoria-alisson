@@ -1355,8 +1355,8 @@ function adicionarConteudoManual(){
 }
 
 function renderCronograma(){
-  // Inicializar quinzena se necessário
-  if(!quinzenaDias.length) cronoIniciarQuinzena();
+  // Só inicializar quinzena se realmente não há dados (nem do banco nem locais)
+  if(!quinzenaDias.length && !cronograma.length) cronoIniciarQuinzena();
   renderCronoQuinzena();
   if(cronograma.length) renderCronoDias();
 }
@@ -1923,8 +1923,11 @@ async function carregarCrono(){
         quinzenaDias = data.quinzena_dias||[];
         cronograma = data.cronograma||[];
         cronoDataInicio = data.data_inicio||null;
-        // Renderizar após carregar
-        setTimeout(()=>{ if(typeof renderCronoDias==='function') renderCronoDias(); }, 100);
+        // Renderizar após carregar — usar setTimeout para garantir que DOM está pronto
+        setTimeout(()=>{
+          if(typeof renderCronoQuinzena==='function') renderCronoQuinzena();
+          if(typeof renderCronoDias==='function') renderCronoDias();
+        }, 300);
         return;
       }
     }catch(e){ console.warn('Erro carregarCrono:', e); }
