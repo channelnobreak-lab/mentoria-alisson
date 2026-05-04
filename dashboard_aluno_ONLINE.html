@@ -1914,16 +1914,20 @@ async function carregarCrono(){
   // Tentar carregar do banco primeiro se online
   if(supaMode && supaAlunoId){
     try{
-      const {data} = await supa.from('cronogramas')
+      console.log('Carregando cronograma do banco para aluno:', supaAlunoId);
+      const {data, error} = await supa.from('cronogramas')
         .select('quinzena_dias,cronograma,data_inicio')
         .eq('aluno_id', supaAlunoId).single();
+      console.log('Resultado cronograma:', data, error);
       if(data){
         quinzenaDias = data.quinzena_dias||[];
         cronograma = data.cronograma||[];
         cronoDataInicio = data.data_inicio||null;
         return;
       }
-    }catch(e){}
+    }catch(e){ console.warn('Erro carregarCrono:', e); }
+  } else {
+    console.log('carregarCrono: supaMode='+supaMode+' supaAlunoId='+supaAlunoId);
   }
   // Fallback: localStorage
   try{
