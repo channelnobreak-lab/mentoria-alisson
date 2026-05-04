@@ -1359,7 +1359,10 @@ function renderCronograma(){
   // Só inicializar quinzena se realmente não há dados (nem do banco nem locais)
   if(!quinzenaDias.length && !cronograma.length) cronoIniciarQuinzena();
   renderCronoQuinzena();
-  if(cronograma.length) renderCronoDias();
+  if(cronograma.length){
+    document.getElementById('crono-resultado').style.display='block';
+    renderCronoDias();
+  }
 }
 
 // ── Inicializar quinzena com 15 dias a partir de hoje ────────
