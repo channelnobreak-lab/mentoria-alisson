@@ -363,9 +363,7 @@ tr:hover td{background:var(--bg);}
 .ebar-val{font-size:11px;font-weight:600;min-width:22px;text-align:right;flex-shrink:0;}
 .erros-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:14px;}
 .erros-stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
-.erros-list-item{display:grid;grid-template-columns:44px 160px 130px 170px 1fr 36px;gap:12px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);font-size:12px;overflow:hidden;}
-.erros-list-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.erros-list-item span[title]{cursor:help;}
+.erros-list-item{display:grid;grid-template-columns:44px 160px 130px 170px 1fr 36px;gap:12px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);font-size:12px;}
 .erros-list-item:last-child{border-bottom:none;}
 .erros-list-item:hover{background:var(--bg);}
 .erros-header-row{display:grid;grid-template-columns:44px 160px 130px 170px 1fr 36px;gap:12px;padding:9px 18px;border-bottom:1px solid var(--border2);background:var(--surface2);}
@@ -2831,10 +2829,10 @@ function renderErrosList(){
     const cor=DISC_CORES[e.materia]||'var(--accent)';
     return `<div class="erros-list-item">
       <span class="err-q-num">Q.${e.questao}</span>
-      <span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.simulado}">${e.simulado}</span>
+      <span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.simulado}</span>
       <span><span class="pill" style="background:${cor}18;color:${cor};white-space:nowrap;font-size:10px">${e.materia.split('—')[0].trim()}</span></span>
-      <span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.modulo}">${e.modulo}</span>
-      <span style="color:var(--text);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.conteudo}">${e.conteudo}</span>
+      <span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.modulo}</span>
+      <span style="color:var(--text);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.conteudo}</span>
       <button class="err-del" onclick="excluirErro(${ri})">✕</button>
     </div>`;
   }).join('');
