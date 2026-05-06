@@ -414,6 +414,7 @@ tr:hover td{background:var(--bg);}
         <button class="painel-nav-btn" onclick="showOverviewTab('ranking',this)">Ranking</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('erros-turma',this)">Erros da turma</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('por-simulado',this)">Por simulado</button>
+        <button class="painel-nav-btn" onclick="showOverviewTab('quinzenas',this)">Quinzenas</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('mapa-erros',this)">Mapa de erros</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('alertas',this)">⚠ Alertas</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('alunos-cadastrados',this)">Alunos cadastrados</button>
@@ -692,16 +693,6 @@ tr:hover td{background:var(--bg);}
       <!-- EXPORTAR -->
       <div id="exportar-aluno" class="painel-section">
         <!-- Observações do aluno -->
-        <!-- Botão ver dashboard do aluno -->
-        <div class="card">
-          <div class="card-title">👁 Dashboard do aluno</div>
-          <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Visualize o dashboard completo como o aluno vê — abre em nova aba com os dados em tempo real.</p>
-          <button class="btn btn-primary" onclick="verDashboardAluno()" id="btn-ver-dash">🔗 Abrir dashboard do aluno</button>
-          <div id="ver-dash-info" style="display:none;margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--muted)">
-            Este aluno ainda não tem acesso configurado. Crie o acesso na aba 🔐 Acessos primeiro.
-          </div>
-        </div>
-
         <div class="card">
           <div class="card-title">📝 Observações sobre o aluno</div>
           <textarea id="aluno-obs-textarea" style="width:100%;min-height:120px;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;font-family:var(--font-body);font-size:13px;color:var(--text);background:var(--surface);resize:vertical;line-height:1.6" placeholder="Anote observações sobre o aluno — dificuldades específicas, comportamento, contexto de vida, estratégias que funcionam..."></textarea>
@@ -1417,23 +1408,13 @@ function renderAlunoProjecao(a){
 
 // ── POR SIMULADO ─────────────────────────────────────────────
 function renderPorSimuladoInit(){
-  // Popular select apenas com simulados feitos por 5+ alunos
+  // Popular select com todos os nomes únicos de simulados na turma
   const sel = document.getElementById('sim-turma-select');
-  const contagem = {};
-  alunos.forEach(a=>(a.simulados||[]).forEach(s=>{
-    contagem[s.nome] = (contagem[s.nome]||0) + 1;
-  }));
-  const nomesFiltrados = Object.entries(contagem)
-    .filter(([,count])=>count>=5)
-    .map(([nome])=>nome)
-    .sort();
+  const nomes = new Set();
+  alunos.forEach(a=>(a.simulados||[]).forEach(s=>nomes.add(s.nome)));
   const atual = sel.value;
   sel.innerHTML = '<option value="">Selecione um simulado...</option>';
-  if(!nomesFiltrados.length){
-    sel.innerHTML += '<option disabled>Nenhum simulado com 5+ alunos ainda</option>';
-  } else {
-    nomesFiltrados.forEach(n=>sel.innerHTML+=`<option value="${n}" ${n===atual?'selected':''}>${n} (${contagem[n]} alunos)</option>`);
-  }
+  [...nomes].sort().forEach(n=>sel.innerHTML+=`<option value="${n}" ${n===atual?'selected':''}>${n}</option>`);
   if(sel.value) renderPorSimulado();
 }
 
@@ -2629,21 +2610,6 @@ async function supaVincularUserIds(){
     await supa.rpc('vincular_user_ids_alunos');
   }catch(e){
     console.warn('RPC vincular_user_ids não disponível:', e.message);
-  }
-}
-
-function verDashboardAluno(){
-  if(!alunoAtual){alert('Selecione um aluno.');return;}
-  if(!alunoAtual.email){
-    document.getElementById('ver-dash-info').style.display='block';
-    return;
-  }
-  // Abrir dashboard do aluno em nova aba — ele vai logar com as credenciais do aluno
-  // Como professor não tem a senha do aluno, abrimos o link e exibimos as credenciais
-  const link = 'https://channelnobreak-lab.github.io/mentoria-alisson/dashboard_aluno_ONLINE.html';
-  const msg = `Dashboard do aluno: ${alunoAtual.nome}\n\nLink: ${link}\nEmail: ${alunoAtual.email}\n\nClique OK para abrir o dashboard em nova aba.`;
-  if(confirm(msg)){
-    window.open(link, '_blank');
   }
 }
 
