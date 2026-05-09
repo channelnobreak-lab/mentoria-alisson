@@ -363,9 +363,12 @@ tr:hover td{background:var(--bg);}
 .ebar-val{font-size:11px;font-weight:600;min-width:22px;text-align:right;flex-shrink:0;}
 .erros-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:14px;}
 .erros-stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
-.erros-list-item{display:grid;grid-template-columns:44px 160px 130px 170px 1fr 36px;gap:12px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);font-size:12px;overflow:hidden;}
-.erros-list-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.erros-list-item span[title]{cursor:help;}
+.erros-list-item{display:block;padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px;}
+.erros-item-top{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.erros-item-bottom{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.erros-item-conteudo{font-size:12px;color:var(--text);font-weight:500;flex:1;line-height:1.4;}
+.erros-item-modulo{font-size:11px;color:var(--muted);flex:1;line-height:1.4;}
+.erros-item-obs{font-size:11px;color:var(--muted);font-style:italic;margin-top:3px;}
 .erros-list-item:last-child{border-bottom:none;}
 .erros-list-item:hover{background:var(--bg);}
 .erros-header-row{display:grid;grid-template-columns:44px 160px 130px 170px 1fr 36px;gap:12px;padding:9px 18px;border-bottom:1px solid var(--border2);background:var(--surface2);}
@@ -725,7 +728,7 @@ tr:hover td{background:var(--bg);}
       <select class="filter-select" id="filtro-modulo-err" onchange="renderErrosList()"><option value="">Todos os módulos</option></select>
       <select class="filter-select" id="filtro-sim-err" onchange="renderErrosList()"><option value="">Todos os simulados</option></select>
     </div>
-    <div class="erros-header-row"><span>Q.</span><span>Origem</span><span>Matéria</span><span>Módulo</span><span>Conteúdo</span><span></span></div>
+    <div style="padding:6px 16px;font-size:10px;font-weight:600;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border2);background:var(--surface2)">Q. &nbsp;·&nbsp; Origem &nbsp;·&nbsp; Matéria &nbsp;·&nbsp; Conteúdo / Módulo</div>
     <div id="erros-list"></div>
   </div>
 </div>
@@ -750,21 +753,31 @@ tr:hover td{background:var(--bg);}
 
     <!-- Opções de geração -->
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:12px;color:var(--muted);white-space:nowrap">Conteúdos por dia de estudo:</span>
-        <div style="display:flex;gap:4px" id="crono-por-dia-btns">
-          <button class="crono-qtd-btn active" data-q="1" onclick="setCronoPorDia(1,this)">1</button>
-          <button class="crono-qtd-btn" data-q="2" onclick="setCronoPorDia(2,this)">2</button>
-          <button class="crono-qtd-btn" data-q="3" onclick="setCronoPorDia(3,this)">3</button>
-          <button class="crono-qtd-btn" data-q="4" onclick="setCronoPorDia(4,this)">4</button>
-        </div>
-      </div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--muted)">Clique em cada dia para configurar os turnos (manhã, tarde, noite).</span></div>
       <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="abrirModalConteudoManual()">✏ Adicionar manualmente</button>
         <button class="btn btn-primary" onclick="cronoGerarCronograma()">⚡ Gerar automaticamente</button>
       </div>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px">Clique em cada dia para definir o tipo. Você pode gerar automaticamente com base nos erros ou adicionar conteúdos manualmente.</div>
+  </div>
+
+  <!-- MODAL: CONFIGURAR TURNOS DO DIA -->
+  <div id="modal-turnos" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--surface);border-radius:16px;padding:24px;max-width:440px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.25);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <div style="font-size:16px;font-weight:700" id="modal-turnos-titulo">Configurar dia</div>
+          <div style="font-size:12px;color:var(--muted)" id="modal-turnos-sub">Configure manhã, tarde e noite</div>
+        </div>
+        <button onclick="document.getElementById('modal-turnos').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+      </div>
+      <div id="modal-turnos-lista"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-turnos').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="cronoSalvarTurnos()">Salvar dia</button>
+      </div>
+    </div>
   </div>
 
   <!-- CRONOGRAMA GERADO -->
@@ -1368,50 +1381,136 @@ function renderCronograma(){
 }
 
 // ── Inicializar quinzena com 15 dias a partir de hoje ────────
+function _turnosPadrao(tipo='estudo'){
+  return [
+    {nome:'Manhã', tipo:tipo, qtd: tipo==='estudo'?1:0},
+    {nome:'Tarde', tipo:tipo, qtd: tipo==='estudo'?1:0},
+    {nome:'Noite', tipo:tipo, qtd: tipo==='estudo'?1:0},
+  ];
+}
+function cronoNormalizarDias(){
+  quinzenaDias.forEach(dia=>{ if(!dia.turnos) dia.turnos=_turnosPadrao(dia.tipo||'estudo'); });
+}
 function cronoIniciarQuinzena(){
   const hoje = new Date();
   cronoDataInicio = hoje.toISOString().slice(0,10);
   quinzenaDias = [];
   for(let i=0;i<15;i++){
-    const d = new Date(hoje);
-    d.setDate(hoje.getDate()+i);
-    const iso = d.toISOString().slice(0,10);
-    // Todos os dias começam como estudo — o aluno decide o que muda
-    quinzenaDias.push({data:iso,tipo:'estudo'});
+    const d = new Date(hoje); d.setDate(hoje.getDate()+i);
+    quinzenaDias.push({data:d.toISOString().slice(0,10), tipo:'estudo', turnos:_turnosPadrao('estudo')});
   }
 }
 
 // ── Grade dos 15 dias ────────────────────────────────────────
 function renderCronoQuinzena(){
+  cronoNormalizarDias();
   const container = document.getElementById('crono-quinzena-grid');
   if(!container) return;
   container.innerHTML = quinzenaDias.map((dia,i)=>{
     const d = new Date(dia.data+'T12:00:00');
     const dow = DIAS_SEMANA_LABEL[d.getDay()];
     const dataFmt = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    const cores = {estudo:'var(--teal)',simulado:'var(--accent)',folga:'var(--muted)'};
-    const icons = {estudo:'📚',simulado:'📝',folga:'❌'};
-    const cor = cores[dia.tipo];
-    return `<div style="border:2px solid ${dia.tipo==='estudo'?'#1A6B5C22':dia.tipo==='simulado'?'#8B1A1A22':'#0000000d'};border-radius:10px;padding:10px 8px;text-align:center;cursor:pointer;transition:all .15s;background:${dia.tipo==='estudo'?'#EAF4F1':dia.tipo==='simulado'?'#FDF0F0':'var(--surface2)'}" onclick="cronoCiclarTipo(${i})">
-      <div style="font-size:10px;color:var(--muted);font-weight:500">${dow}</div>
-      <div style="font-size:12px;font-weight:600;color:${cor};margin:2px 0">${dataFmt}</div>
-      <div style="font-size:18px;margin:4px 0">${icons[dia.tipo]}</div>
-      <div style="font-size:9px;color:${cor};font-weight:600;text-transform:uppercase;letter-spacing:.05em">${dia.tipo==='estudo'?'Estudo':dia.tipo==='simulado'?'Simulado':'Folga'}</div>
+    const slots = dia.turnos.reduce((s,t)=>s+(t.tipo==='estudo'?t.qtd:0),0);
+    const todosfolga = dia.turnos.every(t=>t.tipo==='folga');
+    const temSim = dia.turnos.some(t=>t.tipo==='simulado');
+    const temRed = dia.turnos.some(t=>t.tipo==='redacao');
+    const icone = todosfolga?'❌':temSim?'📝':temRed?'✍️':slots>0?'📚':'📅';
+    const bg = todosfolga?'var(--surface2)':temSim?'#FDF0F0':temRed?'#F0F4FF':'#EAF4F1';
+    const brd = todosfolga?'#0000000d':temSim?'#8B1A1A22':temRed?'#1A3F6B22':'#1A6B5C22';
+    const turnoIcons = dia.turnos.map(t=>{
+      const cor = t.tipo==='estudo'?'#1A6B5C':t.tipo==='simulado'?'#8B1A1A':t.tipo==='redacao'?'#1A3F6B':'#CCC';
+      const txt = t.tipo==='estudo'?(t.qtd||'0'):t.tipo==='simulado'?'S':t.tipo==='redacao'?'R':'—';
+      return `<span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${cor}22;color:${cor};font-size:9px;font-weight:700;text-align:center;line-height:18px">${txt}</span>`;
+    }).join('');
+    return `<div style="border:2px solid ${brd};border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer;transition:all .15s;background:${bg}" onclick="cronoAbrirTurnos(${i})">
+      <div style="font-size:10px;font-weight:600;color:var(--muted)">${dow}</div>
+      <div style="font-size:11px;font-weight:700;margin:2px 0">${dataFmt}</div>
+      <div style="font-size:18px;margin:2px 0">${icone}</div>
+      <div style="display:flex;gap:2px;justify-content:center;margin-top:4px">${turnoIcons}</div>
+      ${slots>0?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${slots} slot${slots>1?'s':''}</div>`:''}
     </div>`;
   }).join('');
 }
 
-function cronoCiclarTipo(i){
-  const ordem = ['estudo','simulado','folga'];
-  const atual = quinzenaDias[i].tipo;
-  quinzenaDias[i].tipo = ordem[(ordem.indexOf(atual)+1)%3];
-  renderCronoQuinzena();
+let _turnosDiaIdx = -1;
+
+function cronoAbrirTurnos(i){
+  _turnosDiaIdx = i;
+  cronoNormalizarDias();
+  const dia = quinzenaDias[i];
+  const d = new Date(dia.data+'T12:00:00');
+  const dowLong = d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'});
+  document.getElementById('modal-turnos-titulo').textContent = dowLong.charAt(0).toUpperCase()+dowLong.slice(1);
+  document.getElementById('modal-turnos-sub').textContent = 'Configure cada turno individualmente';
+  const tipos = [{v:'estudo',l:'📚 Estudo'},{v:'folga',l:'❌ Folga'},{v:'simulado',l:'📝 Simulado'},{v:'redacao',l:'✍️ Redação'}];
+  const icons = ['🌅 Manhã','☀️ Tarde','🌙 Noite'];
+  document.getElementById('modal-turnos-lista').innerHTML = dia.turnos.map((t,ti)=>`
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text)">${icons[ti]}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        ${tipos.map(tp=>`<button
+          id="turno-tipo-${ti}-${tp.v}"
+          onclick="cronoSetTurnoTipo(${ti},'${tp.v}')"
+          style="padding:5px 10px;border-radius:6px;border:1.5px solid ${t.tipo===tp.v?'var(--accent)':'var(--border2)'};background:${t.tipo===tp.v?'var(--accent)':'var(--surface)'};color:${t.tipo===tp.v?'white':'var(--text)'};font-size:11px;cursor:pointer;transition:all .1s">${tp.l}</button>`).join('')}
+      </div>
+      <div id="turno-qtd-row-${ti}" style="display:${t.tipo==='estudo'?'flex':'none'};align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--muted)">Conteúdos:</span>
+        ${[1,2,3,4].map(n=>`<button
+          id="turno-qtd-${ti}-${n}"
+          onclick="cronoSetTurnoQtd(${ti},${n})"
+          style="width:30px;height:30px;border-radius:6px;border:1.5px solid ${t.qtd===n?'var(--accent)':'var(--border2)'};background:${t.qtd===n?'var(--accent)':'var(--surface)'};color:${t.qtd===n?'white':'var(--text)'};font-size:13px;font-weight:600;cursor:pointer;transition:all .1s">${n}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  document.getElementById('modal-turnos').style.display='flex';
 }
+
+function cronoSetTurnoTipo(ti, tipo){
+  if(_turnosDiaIdx<0) return;
+  const t = quinzenaDias[_turnosDiaIdx].turnos[ti];
+  t.tipo = tipo;
+  // Visual
+  ['estudo','folga','simulado','redacao'].forEach(tp=>{
+    const btn = document.getElementById(`turno-tipo-${ti}-${tp}`);
+    if(!btn) return;
+    const ativo = tp===tipo;
+    btn.style.background = ativo?'var(--accent)':'var(--surface)';
+    btn.style.borderColor = ativo?'var(--accent)':'var(--border2)';
+    btn.style.color = ativo?'white':'var(--text)';
+  });
+  document.getElementById(`turno-qtd-row-${ti}`).style.display = tipo==='estudo'?'flex':'none';
+}
+
+function cronoSetTurnoQtd(ti, qtd){
+  if(_turnosDiaIdx<0) return;
+  quinzenaDias[_turnosDiaIdx].turnos[ti].qtd = qtd;
+  [1,2,3,4].forEach(n=>{
+    const btn = document.getElementById(`turno-qtd-${ti}-${n}`);
+    if(!btn) return;
+    const ativo = n===qtd;
+    btn.style.background = ativo?'var(--accent)':'var(--surface)';
+    btn.style.borderColor = ativo?'var(--accent)':'var(--border2)';
+    btn.style.color = ativo?'white':'var(--text)';
+  });
+}
+
+function cronoSalvarTurnos(){
+  if(_turnosDiaIdx>=0){
+    const dia = quinzenaDias[_turnosDiaIdx];
+    const temEstudo = dia.turnos.some(t=>t.tipo==='estudo'&&t.qtd>0);
+    const todosfolga = dia.turnos.every(t=>t.tipo==='folga');
+    dia.tipo = todosfolga?'folga':temEstudo?'estudo':'simulado';
+  }
+  document.getElementById('modal-turnos').style.display='none';
+  renderCronoQuinzena();
+  salvarCrono();
+}
+
 
 // ── Algoritmo de geração ─────────────────────────────────────
 function cronoGerarCronograma(){
-  const diasEstudo = quinzenaDias.filter(d=>d.tipo==='estudo');
-  if(!diasEstudo.length){alert('Marque pelo menos um dia de estudo na quinzena.');return;}
+  cronoNormalizarDias();
+  const temEstudo = quinzenaDias.some(d=>d.turnos.some(t=>t.tipo==='estudo'&&t.qtd>0));
+  if(!temEstudo){alert('Configure pelo menos um turno de estudo na quinzena.');return;}
   if(!erros.length){alert('Registre erros primeiro — o cronograma é gerado a partir deles.');return;}
 
   // 1. Prioridade por área: % de acertos nos últimos 5 simulados
@@ -1487,32 +1586,37 @@ function cronoGerarCronograma(){
     if(!adicionou||s++>200) break;
   }
 
-  // 4. Distribuir cronoPorDia conteúdos por dia de estudo
+  // 4. Distribuir por turno
+  const TURNO_NOMES = ['Manhã','Tarde','Noite'];
   const novosCronograma=[];
   let filaIdx=0;
-  diasEstudo.forEach(dia=>{
-    for(let slot=0;slot<cronoPorDia;slot++){
-      const item=filaAlternada[filaIdx++];
-      if(!item) break;
-      novosCronograma.push({
-        diaIdx:quinzenaDias.indexOf(dia),
-        sessaoData:dia.data,
-        conteudo:item.conteudo,materia:item.materia,modulo:item.modulo,area:item.area,
-        tipo:item.eRevisao?'revisao':'estudo',
-        concluido:false,exQtd:0,exAcertos:0,
-        revConcluido:false,revExQtd:0,revExAcertos:0,
-        tempoExtra:true
-      });
-    }
-  });
-
-  // Adicionar simulados
-  quinzenaDias.forEach((dia,i)=>{
-    if(dia.tipo!=='simulado') return;
-    novosCronograma.push({
-      diaIdx:i,sessaoData:dia.data,
-      tipo:'simulado',conteudo:'Simulado',materia:'',modulo:'',area:'',
-      concluido:false,exQtd:0,exAcertos:0
+  quinzenaDias.forEach((dia,diaIdx)=>{
+    dia.turnos.forEach((turno,turnoIdx)=>{
+      if(turno.tipo==='estudo'){
+        for(let slot=0;slot<(turno.qtd||0);slot++){
+          const item=filaAlternada[filaIdx++];
+          if(!item) break;
+          novosCronograma.push({
+            diaIdx, sessaoData:dia.data, turnoIdx, turnoNome:TURNO_NOMES[turnoIdx],
+            conteudo:item.conteudo, materia:item.materia, modulo:item.modulo, area:item.area,
+            tipo:item.eRevisao?'revisao':'estudo',
+            concluido:false, exQtd:0, exAcertos:0,
+            revConcluido:false, revExQtd:0, revExAcertos:0, tempoExtra:true
+          });
+        }
+      } else if(turno.tipo==='simulado'){
+        novosCronograma.push({
+          diaIdx, sessaoData:dia.data, turnoIdx, turnoNome:TURNO_NOMES[turnoIdx],
+          tipo:'simulado', conteudo:'Simulado', materia:'', modulo:'', area:'',
+          concluido:false, exQtd:0, exAcertos:0
+        });
+      } else if(turno.tipo==='redacao'){
+        novosCronograma.push({
+          diaIdx, sessaoData:dia.data, turnoIdx, turnoNome:TURNO_NOMES[turnoIdx],
+          tipo:'redacao', conteudo:'Redação', materia:'', modulo:'', area:'',
+          concluido:false, exQtd:0, exAcertos:0
+        });
+      }
     });
   });
 
@@ -1537,8 +1641,8 @@ function cronoGerarCronograma(){
 function renderCronoDias(){
   const container=document.getElementById('crono-dias-container');
   if(!cronograma.length){container.innerHTML='<p style="color:var(--muted);font-size:13px">Clique em "Gerar cronograma" para distribuir os conteúdos.</p>';return;}
-  const total=cronograma.filter(c=>c.tipo!=='simulado').length;
-  const concluidos=cronograma.filter(c=>c.concluido&&c.tipo!=='simulado').length;
+  const total=cronograma.filter(x=>x.tipo!=='simulado'&&x.tipo!=='redacao').length;
+  const concluidos=cronograma.filter(x=>x.concluido&&x.tipo!=='simulado'&&x.tipo!=='redacao').length;
   document.getElementById('crono-titulo').textContent=`Cronograma da quinzena — ${concluidos}/${total} conteúdos concluídos`;
 
   // Agrupar por data
@@ -1547,30 +1651,42 @@ function renderCronoDias(){
     if(!porDia[item.sessaoData])porDia[item.sessaoData]=[];
     porDia[item.sessaoData].push({...item,idx});
   });
-  // Também mostrar dias de folga e dias sem conteúdo alocado
-  quinzenaDias.forEach(dia=>{
-    if(!porDia[dia.data]) porDia[dia.data]=[{tipo:'vazio',sessaoData:dia.data,tipoDia:dia.tipo}];
-  });
+  quinzenaDias.forEach(dia=>{ if(!porDia[dia.data]) porDia[dia.data]=[]; });
 
   container.innerHTML=Object.entries(porDia).sort(([a],[b])=>a.localeCompare(b)).map(([data,itens])=>{
     const d=new Date(data+'T12:00:00');
     const dow=DIAS_SEMANA_LABEL[d.getDay()];
     const dataFmt=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',weekday:'long'});
-    const tipoDia=quinzenaDias.find(x=>x.data===data)?.tipo||'estudo';
-    const headerCor=tipoDia==='simulado'?'var(--accent-light)':tipoDia==='folga'?'var(--surface2)':'var(--teal-light)';
-    const headerBorder=tipoDia==='simulado'?'var(--accent)':tipoDia==='folga'?'var(--border2)':'var(--teal)';
+    const diaObj=quinzenaDias.find(x=>x.data===data)||{tipo:'estudo',turnos:_turnosPadrao()};
+    const headerCor='var(--teal-light)';
+    const headerBorder='var(--teal)';
+
+    // Agrupar itens por turno
+    const porTurno={0:[],1:[],2:[]};
+    itens.forEach(item=>{ const ti=item.turnoIdx??0; if(porTurno[ti]!==undefined) porTurno[ti].push(item); else porTurno[0].push(item); });
+
+    const turnoIcons=['🌅 Manhã','☀️ Tarde','🌙 Noite'];
+    const turnosCols = diaObj.turnos ? diaObj.turnos.map((t,ti)=>{
+      const itsTurno = porTurno[ti]||[];
+      if(t.tipo==='folga' && !itsTurno.length) return `<div style="padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><span>${turnoIcons[ti]}</span><span>Folga</span></div>`;
+      if(!itsTurno.length) return '';
+      return `<div style="margin-bottom:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:4px 0;border-bottom:1px solid var(--border)">${turnoIcons[ti]}</div>
+        ${itsTurno.map(item=>renderCronoCard(item)).join('')}
+      </div>`;
+    }).join('') : itens.map(item=>renderCronoCard(item)).join('');
+
+    const labelDia = dow+', '+(dataFmt.split(',')[1]?.trim()||data);
     return `<div class="crono-dia-block">
       <div class="crono-dia-header" style="background:${headerCor};border-left:3px solid ${headerBorder}">
-        <span class="crono-dia-label">${dow}, ${dataFmt.split(',')[1]?.trim()||data}</span>
-        ${tipoDia==='folga'?'<span style="font-size:11px;color:var(--muted)">❌ Folga</span>':tipoDia==='simulado'?'<span style="font-size:11px;color:var(--accent);font-weight:500">📝 Simulado</span>':'<span style="font-size:11px;color:var(--teal)">📚 Dia de estudo</span>'}
+        <span class="crono-dia-label">${labelDia}</span>
+        <span style="font-size:11px;color:var(--teal)">📚 Dia de estudo</span>
       </div>
-      ${itens.map(item=>{
-        if(item.tipo==='vazio') return tipoDia==='folga'?`<div style="padding:10px 16px;color:var(--muted);font-size:12px;font-style:italic">Dia de descanso</div>`:'';
-        return renderCronoCard(item);
-      }).join('')}
+      ${turnosCols||`<div style="padding:10px 16px;color:var(--muted);font-size:12px;font-style:italic">Sem conteúdos alocados</div>`}
     </div>`;
   }).join('');
 }
+
 
 // ── Pré-requisitos por conteúdo ─────────────────────────────
 const PREREQS = {
@@ -1795,7 +1911,16 @@ function renderCronoCard(item){
       <div class="crono-card-icon">📝</div>
       <div class="crono-card-body">
         <div class="crono-card-title" style="color:var(--accent);font-size:14px;font-weight:600">SIMULADO</div>
-        <div class="crono-card-sub">Dedique o dia inteiro para condições reais de prova</div>
+        <div class="crono-card-sub">Condições reais de prova${item.turnoNome?' — '+item.turnoNome:''}</div>
+      </div>
+    </div>`;
+  }
+  if(item.tipo==='redacao'){
+    return `<div class="crono-card" style="border-left:3px solid #1A3F6B">
+      <div class="crono-card-icon">✍️</div>
+      <div class="crono-card-body">
+        <div class="crono-card-title" style="color:#1A3F6B;font-size:14px;font-weight:600">REDAÇÃO</div>
+        <div class="crono-card-sub">Prática de escrita dissertativo-argumentativa${item.turnoNome?' — '+item.turnoNome:''}</div>
       </div>
     </div>`;
   }
@@ -2346,19 +2471,21 @@ function renderMetaChart(){
 // PREVISÃO
 // ══════════════════════════════════════════════════════════════
 function calcPrevisao(areaFn, totalQ){
-  const vals=simulados.map(s=>areaFn(s));
-  const pcts=simulados.map((s,i)=>vals[i]/totalQ);
-  // tendência ponderada: pesos crescentes
-  const n=pcts.length;
-  let sw=0,swv=0;
-  pcts.forEach((v,i)=>{const w=(i+1)**2; sw+=w; swv+=w*v;});
-  const baseP=swv/sw;
-  // também calcular via regressão linear para ter 2 cenários
-  const linTrend=linearRegression(pcts);
-  const linP=linTrend[linTrend.length-1];
-  const conservador=Math.max(0,Math.min(1,baseP*0.95));
-  const realista=Math.max(0,Math.min(1,baseP));
-  const otimista=Math.max(0,Math.min(1,(baseP+linP)/2*1.03));
+  // Filtrar apenas simulados onde a área foi realizada (não null)
+  const simsComArea = simulados.filter(s => areaFn(s) !== null);
+  if(!simsComArea.length) return {conservador:0, realista:0, otimista:0, baseP:0};
+
+  const pcts = simsComArea.map(s => areaFn(s) / totalQ);
+  const n = pcts.length;
+  let sw=0, swv=0;
+  pcts.forEach((v,i)=>{ const w=(i+1)**2; sw+=w; swv+=w*v; });
+  const baseP = swv/sw;
+  // regressão linear só com os simulados que têm essa área
+  const linTrend = linearRegression(pcts);
+  const linP = linTrend[linTrend.length-1];
+  const conservador = Math.max(0, Math.min(1, baseP*0.95));
+  const realista    = Math.max(0, Math.min(1, baseP));
+  const otimista    = Math.max(0, Math.min(1, (baseP+linP)/2*1.03));
   return {conservador:conservador*totalQ, realista:realista*totalQ, otimista:otimista*totalQ, baseP};
 }
 
@@ -2830,12 +2957,19 @@ function renderErrosList(){
     const ri=erros.indexOf(e);
     const cor=DISC_CORES[e.materia]||'var(--accent)';
     return `<div class="erros-list-item">
-      <span class="err-q-num">Q.${e.questao}</span>
-      <span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.simulado}">${e.simulado}</span>
-      <span><span class="pill" style="background:${cor}18;color:${cor};white-space:nowrap;font-size:10px">${e.materia.split('—')[0].trim()}</span></span>
-      <span style="color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.modulo}">${e.modulo}</span>
-      <span style="color:var(--text);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.conteudo}">${e.conteudo}</span>
-      <button class="err-del" onclick="excluirErro(${ri})">✕</button>
+      <div class="erros-item-top">
+        <span class="err-q-num">Q.${e.questao}</span>
+        <span style="color:var(--muted);font-size:11px">${e.simulado}</span>
+        <span class="pill" style="background:${cor}18;color:${cor};font-size:10px;margin-left:auto">${e.materia.split('—')[0].trim()}</span>
+        <button class="err-del" onclick="excluirErro(${ri})">✕</button>
+      </div>
+      <div class="erros-item-bottom">
+        <div>
+          <div class="erros-item-conteudo">${e.conteudo}</div>
+          <div class="erros-item-modulo">${e.modulo}</div>
+          ${e.obs?`<div class="erros-item-obs">💬 ${e.obs}</div>`:''}
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
