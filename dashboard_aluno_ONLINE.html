@@ -106,7 +106,8 @@ async function carregarDadosAluno(user){
     nome: alunoData.nome,
     objetivo: alunoData.objetivo||'',
     metas: alunoData.metas||{cn:39,ch:40,lin:36,mat:41},
-    enemHistorico: alunoData.enemy_historico||[]
+    enemHistorico: alunoData.enemy_historico||[],
+    areasBloqueadas: alunoData.areas_bloqueadas||[]
   };
 
   simulados = (alunoData.simulados||[])
@@ -1555,7 +1556,14 @@ function cronoGerarCronograma(){
   const totalErros=erros.length;
   const countM={};erros.forEach(e=>countM[e.materia]=(countM[e.materia]||0)+1);
 
-  const fila = Object.values(conteudoMap).map(item=>{
+  // Áreas bloqueadas pelo professor
+  const areasBloqueadas = config.areasBloqueadas || [];
+  const AREA_SIGLA = {'CN':'CN','CH':'CH','LCT':'LCT','MAT':'MAT'};
+
+  const fila = Object.values(conteudoMap).filter(item=>{
+    const area = MAT_AREA_CRONO[item.materia]||'CN';
+    return !areasBloqueadas.includes(area);
+  }).map(item=>{
     const {materia,modulo,conteudo,count}=item;
     // Normaliza pela qtd esperada de questões por matéria — elimina viés de volume
     const matNorm=erroNorm(materia,countM[materia]||0);
@@ -1942,7 +1950,9 @@ function renderCronoCard(item){
   const _iaIdx = (item.idx !== undefined && item.idx !== null) ? item.idx : -1;
   if(_iaIdx >= 0) acoesHtml+=`<button class="crono-btn" style="background:var(--blue);color:white;border-color:var(--blue)" onclick="abrirResumoIAIdx(${_iaIdx})">💡 O que estudar</button>`;
   if(!item.concluido) acoesHtml+=`<button class="crono-btn crono-btn-concluir" onclick="cronoAbrirConclusao(${item.idx})">✓ Concluído</button>`;
+  if(item.concluido) acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px;color:var(--muted)" onclick="cronoDesfazerConclusao(${item.idx})">↩ Desfazer</button>`;
   if(item.concluido&&isRevisao&&!item.revConcluido) acoesHtml+=`<button class="crono-btn crono-btn-revisao" onclick="cronoAbrirRevisao(${item.idx})">🔄 Revisão feita</button>`;
+  if(item.concluido&&isRevisao&&item.revConcluido) acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px;color:var(--muted)" onclick="cronoDesfazerRevisao(${item.idx})">↩ Desfazer revisão</button>`;
   acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoPuxarProximo(${item.idx})">⏩ Próximo</button>`;
 
   return `<div class="${cardClass}" id="crono-card-${item.idx}">
@@ -1962,6 +1972,25 @@ function renderCronoCard(item){
 }
 
 // ── Conclusão ────────────────────────────────────────────────
+function cronoDesfazerConclusao(idx){
+  if(!confirm('Desfazer conclusão deste conteúdo?')) return;
+  cronograma[idx].concluido = false;
+  cronograma[idx].exQtd = 0;
+  cronograma[idx].exAcertos = 0;
+  cronograma[idx].revConcluido = false;
+  cronograma[idx].revExQtd = 0;
+  cronograma[idx].revExAcertos = 0;
+  renderCronoDias();
+  salvarCrono();
+}
+function cronoDesfazerRevisao(idx){
+  if(!confirm('Desfazer a revisão deste conteúdo?')) return;
+  cronograma[idx].revConcluido = false;
+  cronograma[idx].revExQtd = 0;
+  cronograma[idx].revExAcertos = 0;
+  renderCronoDias();
+  salvarCrono();
+}
 function cronoAbrirConclusao(idx){
   cronoModalIdx=idx;
   document.getElementById('conc-total').value='';
@@ -3191,6 +3220,7 @@ const OP_MATS = [
   {key:'soc',label:'Sociologia',cor:'#1A5276'},
   {key:'por',label:'Português',cor:'#6D4C41'},
   {key:'lit',label:'Literatura',cor:'#117A65'},
+  {key:'le', label:'Língua Estrangeira',cor:'#0E6655'},
   {key:'art',label:'Artes',cor:'#784212'},
 ];
 let outrasProvas = [];
