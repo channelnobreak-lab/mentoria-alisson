@@ -342,6 +342,8 @@ tr:hover td{background:var(--bg);}
   .sidebar{width:100%;max-height:200px;}
   .header,.painel-nav,.painel-section,.main-inner{padding-left:16px;padding-right:16px;}
 }
+.btn-blq{padding:8px 16px;border-radius:8px;border:2px solid var(--border2);background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+.btn-blq.bloqueado{background:#8B1A1A;border-color:#8B1A1A;color:white;}
 </style>
 </head>
 <body>
@@ -691,6 +693,20 @@ tr:hover td{background:var(--bg);}
 
       <!-- EXPORTAR -->
       <div id="exportar-aluno" class="painel-section">
+        <!-- Bloqueio de áreas do cronograma -->
+        <div class="card">
+          <div class="card-title">🚫 Bloqueio de áreas no cronograma</div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:14px">As áreas bloqueadas são ignoradas pelo algoritmo ao gerar o cronograma do aluno.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="areas-bloqueio-btns">
+            <button id="blq-CN" onclick="toggleAreaBloqueio('CN')" class="btn-blq">🔬 CN</button>
+            <button id="blq-CH" onclick="toggleAreaBloqueio('CH')" class="btn-blq">📜 CH</button>
+            <button id="blq-MAT" onclick="toggleAreaBloqueio('MAT')" class="btn-blq">📐 MAT</button>
+            <button id="blq-LCT" onclick="toggleAreaBloqueio('LCT')" class="btn-blq">📝 LC</button>
+          </div>
+          <button class="btn btn-primary" onclick="salvarAreasBloqueio()" style="width:100%">💾 Salvar bloqueios</button>
+          <div id="blq-status" style="font-size:12px;color:var(--muted);margin-top:8px;text-align:center"></div>
+        </div>
+
         <!-- Observações do aluno -->
         <!-- Botão ver dashboard do aluno -->
         <div class="card">
@@ -1120,6 +1136,7 @@ function selecionarAluno(id){
   document.querySelector('#aluno-painel-nav .painel-nav-btn').classList.add('active');
   document.getElementById('dashboard').classList.add('active');
   renderAlunoDashboard();
+  renderAreasBloqueio();
 }
 
 function showOverview(){
@@ -2630,6 +2647,50 @@ async function supaVincularUserIds(){
     await supa.rpc('vincular_user_ids_alunos');
   }catch(e){
     console.warn('RPC vincular_user_ids não disponível:', e.message);
+  }
+}
+
+function renderAreasBloqueio(){
+  const areas = ['CN','CH','MAT','LCT'];
+  const bloqueadas = alunoAtual?.areas_bloqueadas || [];
+  areas.forEach(a=>{
+    const btn = document.getElementById('blq-'+a);
+    if(!btn) return;
+    if(bloqueadas.includes(a)){
+      btn.classList.add('bloqueado');
+      btn.title = 'Clique para desbloquear';
+    } else {
+      btn.classList.remove('bloqueado');
+      btn.title = 'Clique para bloquear';
+    }
+  });
+}
+
+function toggleAreaBloqueio(area){
+  if(!alunoAtual) return;
+  if(!alunoAtual.areas_bloqueadas) alunoAtual.areas_bloqueadas = [];
+  const idx = alunoAtual.areas_bloqueadas.indexOf(area);
+  if(idx>=0) alunoAtual.areas_bloqueadas.splice(idx,1);
+  else alunoAtual.areas_bloqueadas.push(area);
+  renderAreasBloqueio();
+}
+
+async function salvarAreasBloqueio(){
+  if(!alunoAtual) return;
+  const status = document.getElementById('blq-status');
+  status.textContent = 'Salvando...';
+  try{
+    const {error} = await supa.from('alunos')
+      .update({areas_bloqueadas: alunoAtual.areas_bloqueadas||[]})
+      .eq('id', alunoAtual.id);
+    if(error) throw error;
+    // Atualizar no array local
+    const idx = alunos.findIndex(a=>a.id===alunoAtual.id);
+    if(idx>=0) alunos[idx].areas_bloqueadas = alunoAtual.areas_bloqueadas;
+    status.textContent = '✅ Salvo com sucesso!';
+    setTimeout(()=>status.textContent='', 3000);
+  }catch(e){
+    status.textContent = '❌ Erro ao salvar: '+e.message;
   }
 }
 
