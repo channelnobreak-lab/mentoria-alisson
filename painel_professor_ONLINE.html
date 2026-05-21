@@ -766,6 +766,7 @@ tr:hover td{background:var(--bg);}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary" style="background:var(--blue);border-color:var(--blue)" onclick="exportarDadosIA()">📋 Copiar relatório</button>
             <button class="btn btn-secondary" onclick="baixarDadosIA()">⬇ Baixar como .txt</button>
+            <button class="btn btn-secondary" onclick="gerarRelatorioPDF()" style="background:#8B1A1A;border-color:#8B1A1A;color:#fff">📄 Baixar PDF</button>
           </div>
           <div id="export-ia-feedback" style="display:none;margin-top:10px;padding:8px 12px;border-radius:6px;font-size:12px;background:#EAF4F1;color:#1A6B5C">✓ Relatório copiado! Cole no Claude para análise.</div>
         </div>
@@ -2022,8 +2023,13 @@ function renderAlunoSimulados(){
     const cnp=pct(cnA(s),cnQ(s)),chp=pct(chA(s),chQ(s)),linp=pct(linA(s),linQ(s)),matp=pct(matA(s),matQ(s));
     const clr=v=>v===null?'var(--muted)':v>=75?'#1A6B5C':v>=55?'#B8860B':'#8B1A1A';
     const cel=(matA,matQ)=>matQ?`${matA}`:'<span style="color:var(--muted);font-size:10px">N/R</span>';
-    tbody.innerHTML+=`<tr>
-      <td style="color:var(--muted)">${i+1}</td><td style="white-space:nowrap">${s.nome}</td>
+    const tr=document.createElement('tr');
+    tr.draggable=true;
+    tr.dataset.idx=i;
+    tr.style.cursor='grab';
+    tr.innerHTML=`
+      <td style="color:var(--muted);user-select:none"><span class="drag-handle" style="cursor:grab;margin-right:4px;opacity:.4;font-size:14px">⠿</span>${i+1}</td>
+      <td style="white-space:nowrap">${s.nome}</td>
       <td>${cel(s.bio?.a,s.bio?.q)}</td><td>${cel(s.qui?.a,s.qui?.q)}</td><td>${cel(s.fis?.a,s.fis?.q)}</td>
       <td><span style="color:${clr(cnp)};font-weight:500">${fmtPct(cnp)}</span></td>
       <td>${cel(s.his?.a,s.his?.q)}</td><td>${cel(s.geo?.a,s.geo?.q)}</td><td>${cel(s.fil?.a,s.fil?.q)}</td><td>${cel(s.soc?.a,s.soc?.q)}</td>
@@ -2033,10 +2039,31 @@ function renderAlunoSimulados(){
       <td style="display:flex;gap:4px">
         <button class="btn-sm" onclick="editarSimulado(${i})">✏</button>
         <button class="btn-sm danger" onclick="excluirSimulado(${i})">✕</button>
-      </td>
-    </tr>`;
+      </td>`;
+    // ── Drag events ──────────────────────────
+    tr.addEventListener('dragstart',e=>{
+      simDragIdx=i;
+      tr.style.opacity='.4';
+      e.dataTransfer.effectAllowed='move';
+    });
+    tr.addEventListener('dragend',()=>{ tr.style.opacity=''; simDragIdx=null; });
+    tr.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; tr.style.background='var(--surface2)'; });
+    tr.addEventListener('dragleave',()=>{ tr.style.background=''; });
+    tr.addEventListener('drop',e=>{
+      e.preventDefault(); tr.style.background='';
+      if(simDragIdx===null||simDragIdx===i)return;
+      const sims=alunoAtual.simulados;
+      const [moved]=sims.splice(simDragIdx,1);
+      sims.splice(i,0,moved);
+      salvarAlunos();
+      const isUUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(alunoAtual.id||'');
+      if(supaMode&&isUUID) supaSalvarSimulados(alunoAtual.id,sims).catch(e=>console.error(e));
+      renderAlunoSimulados();
+    });
+    tbody.appendChild(tr);
   });
 }
+let simDragIdx=null;
 
 function renderAlunoErros(){
   if(!alunoAtual)return;
@@ -2454,6 +2481,219 @@ function baixarDadosIA(){
   a.download=`relatorio_${(alunoAtual?.nome||'aluno').replace(/\s+/g,'_').toLowerCase()}_${new Date().toISOString().slice(0,10)}.txt`;
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+// ── Relatório PDF do aluno ────────────────────────────────────
+async function gerarRelatorioPDF(){
+  if(!alunoAtual){alert('Selecione um aluno.');return;}
+  // Carregar jsPDF + AutoTable
+  if(typeof window.jspdf==='undefined'){
+    await Promise.all([
+      new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);}),
+      new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);})
+    ]);
+  }
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const a=alunoAtual;
+  const sims=a.simulados||[];
+  const erros=a.erros||[];
+  const reds=a.redacoes||[];
+  const W=210, M=14;
+  let y=M;
+
+  // Helpers
+  const pct=(ac,q)=>q>0?Math.round(ac/q*100):null;
+  const fmtPct=v=>v===null?'—':v+'%';
+  const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+  const f1=n=>n!==null&&n!==undefined&&!isNaN(n)?n.toFixed(1):'—';
+  const cnAf=s=>{const q=(s.bio?.q||0)+(s.qui?.q||0)+(s.fis?.q||0);return q?(s.bio?.a||0)+(s.qui?.a||0)+(s.fis?.a||0):null;};
+  const chAf=s=>{const q=(s.his?.q||0)+(s.geo?.q||0)+(s.fil?.q||0)+(s.soc?.q||0);return q?(s.his?.a||0)+(s.geo?.a||0)+(s.fil?.a||0)+(s.soc?.a||0):null;};
+  const cnQf=s=>(s.bio?.q||0)+(s.qui?.q||0)+(s.fis?.q||0)||null;
+  const chQf=s=>(s.his?.q||0)+(s.geo?.q||0)+(s.fil?.q||0)+(s.soc?.q||0)||null;
+  const linAf=s=>s.lin?.q?s.lin.a:null; const linQf=s=>s.lin?.q||null;
+  const matAf=s=>s.mat?.q?s.mat.a:null; const matQf=s=>s.mat?.q||null;
+  const clrArea=v=>v===null?[150,150,150]:v>=75?[26,107,92]:v>=55?[184,134,11]:[139,26,26];
+
+  const addPage=()=>{doc.addPage();y=M;};
+  const checkY=(need=20)=>{if(y+need>285)addPage();};
+
+  // ── CAPA ────────────────────────────────────────────────────
+  doc.setFillColor(26,63,107); doc.rect(0,0,W,38,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(18); doc.setFont('helvetica','bold');
+  doc.text('Relatório do Aluno', M, 16);
+  doc.setFontSize(11); doc.setFont('helvetica','normal');
+  doc.text('Prof. Alisson Pedrosa — Mentoria ENEM', M, 24);
+  doc.setFontSize(9);
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}`, M, 31);
+
+  y=48;
+  doc.setTextColor(30,30,30);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text(a.nome||'—', M, y); y+=8;
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.setTextColor(100,100,100);
+  if(a.objetivo) { doc.text(`Objetivo: ${a.objetivo}`, M, y); y+=6; }
+  doc.text(`Simulados: ${sims.length}  ·  Erros registrados: ${erros.length}  ·  Redações: ${reds.length}`, M, y); y+=10;
+
+  // Metas
+  if(a.metas){
+    doc.setFillColor(240,244,255); doc.roundedRect(M,y,W-2*M,18,2,2,'F');
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(26,63,107);
+    doc.text('METAS',M+4,y+6);
+    doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
+    const metaStr=`CN: ${a.metas.cn||'—'}  ·  CH: ${a.metas.ch||'—'}  ·  Lin: ${a.metas.lin||'—'}  ·  Mat: ${a.metas.mat||'—'}`;
+    doc.text(metaStr,M+4,y+13); y+=24;
+  }
+
+  // ── MÉDIAS POR ÁREA ────────────────────────────────────────
+  checkY(50);
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30);
+  doc.text('Desempenho por área (médias gerais)', M, y); y+=6;
+  doc.setDrawColor(220,220,220); doc.line(M,y,W-M,y); y+=6;
+
+  const areas=[
+    {n:'Natureza (CN)', ac:avg(sims.map(cnAf)), q:avg(sims.map(cnQf)), meta:a.metas?.cn},
+    {n:'Humanas (CH)',  ac:avg(sims.map(chAf)), q:avg(sims.map(chQf)), meta:a.metas?.ch},
+    {n:'Linguagens',   ac:avg(sims.map(linAf)),q:avg(sims.map(linQf)),meta:a.metas?.lin},
+    {n:'Matemática',   ac:avg(sims.map(matAf)),q:avg(sims.map(matQf)),meta:a.metas?.mat},
+  ];
+  const barW=(W-2*M-10)/4;
+  areas.forEach((ar,i)=>{
+    const x=M+i*(barW+3);
+    const p=ar.q?pct(ar.ac,ar.q):null;
+    const cor=clrArea(p);
+    doc.setFillColor(...cor); doc.roundedRect(x,y,barW,22,2,2,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(14);
+    doc.text(fmtPct(p),x+barW/2,y+11,{align:'center'});
+    doc.setFont('helvetica','normal'); doc.setFontSize(7);
+    doc.text(ar.n,x+barW/2,y+17,{align:'center'});
+    if(ar.meta){ doc.text(`meta: ${ar.meta}`,x+barW/2,y+21,{align:'center'}); }
+  });
+  y+=30;
+
+  // ── TABELA DE SIMULADOS ────────────────────────────────────
+  checkY(30);
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30);
+  doc.text('Histórico de simulados', M, y); y+=4;
+
+  const simRows=sims.map((s,i)=>{
+    const cnp=pct(cnAf(s),cnQf(s)), chp=pct(chAf(s),chQf(s)), lp=pct(linAf(s),linQf(s)), mp=pct(matAf(s),matQf(s));
+    return [i+1, s.nome, fmtPct(cnp), fmtPct(chp), fmtPct(lp), fmtPct(mp)];
+  });
+  doc.autoTable({
+    startY:y, margin:{left:M,right:M},
+    head:[['#','Simulado','CN%','CH%','Lin%','Mat%']],
+    body:simRows,
+    styles:{fontSize:8,cellPadding:2.5},
+    headStyles:{fillColor:[26,63,107],textColor:255,fontStyle:'bold',fontSize:8},
+    columnStyles:{0:{cellWidth:8,halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},5:{halign:'center'}},
+    alternateRowStyles:{fillColor:[245,247,252]},
+    didParseCell:(d)=>{
+      if(d.section==='body'&&d.column.index>=2){
+        const v=parseInt(d.cell.raw);
+        if(!isNaN(v)){
+          d.cell.styles.textColor=v>=75?[26,107,92]:v>=55?[184,134,11]:[139,26,26];
+          d.cell.styles.fontStyle='bold';
+        }
+      }
+    }
+  });
+  y=doc.lastAutoTable.finalY+10;
+
+  // ── ERROS ────────────────────────────────────────────────
+  if(erros.length){
+    checkY(30);
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30);
+    doc.text('Análise de erros', M, y); y+=4;
+    const countM={}, countMod={}, countC={};
+    erros.forEach(e=>{
+      countM[e.materia]=(countM[e.materia]||0)+1;
+      countMod[e.modulo]=(countMod[e.modulo]||0)+1;
+      countC[e.conteudo]=(countC[e.conteudo]||0)+1;
+    });
+    const matRows=Object.entries(countM).sort((a,b)=>b[1]-a[1]).map(([m,c])=>[m,c,`${Math.round(c/erros.length*100)}%`]);
+    doc.autoTable({
+      startY:y, margin:{left:M,right:M},
+      head:[['Matéria','Qtd','%']],
+      body:matRows,
+      styles:{fontSize:8,cellPadding:2.5},
+      headStyles:{fillColor:[139,26,26],textColor:255,fontStyle:'bold'},
+      columnStyles:{1:{halign:'center'},2:{halign:'center'}},
+      tableWidth:(W-2*M)*0.45,
+    });
+    const modRows=Object.entries(countMod).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>[m,c]);
+    doc.autoTable({
+      startY:y, margin:{left:M+((W-2*M)*0.45)+4,right:M},
+      head:[['Top módulos','Qtd']],
+      body:modRows,
+      styles:{fontSize:8,cellPadding:2.5},
+      headStyles:{fillColor:[139,26,26],textColor:255,fontStyle:'bold'},
+      columnStyles:{1:{halign:'center',cellWidth:12}},
+    });
+    y=Math.max(doc.lastAutoTable.finalY,y)+10;
+
+    // Top conteúdos
+    checkY(20);
+    const contRows=Object.entries(countC).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([c,n])=>[c,n,`${Math.round(n/erros.length*100)}%`]);
+    doc.autoTable({
+      startY:y, margin:{left:M,right:M},
+      head:[['Top conteúdos mais errados','Qtd','%']],
+      body:contRows,
+      styles:{fontSize:8,cellPadding:2.5},
+      headStyles:{fillColor:[139,26,26],textColor:255,fontStyle:'bold'},
+      columnStyles:{1:{halign:'center',cellWidth:14},2:{halign:'center',cellWidth:14}},
+      alternateRowStyles:{fillColor:[255,248,248]},
+    });
+    y=doc.lastAutoTable.finalY+10;
+  }
+
+  // ── REDAÇÕES ─────────────────────────────────────────────
+  if(reds.length){
+    checkY(30);
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30);
+    doc.text('Redações', M, y); y+=4;
+    const redRows=reds.map((r,i)=>[i+1,r.tema,r.c1,r.c2,r.c3,r.c4,r.c5,r.nota]);
+    doc.autoTable({
+      startY:y, margin:{left:M,right:M},
+      head:[['#','Tema','C1','C2','C3','C4','C5','Nota']],
+      body:redRows,
+      styles:{fontSize:8,cellPadding:2.5},
+      headStyles:{fillColor:[100,60,140],textColor:255,fontStyle:'bold'},
+      columnStyles:{0:{cellWidth:8,halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},5:{halign:'center'},6:{halign:'center'},7:{halign:'center',fontStyle:'bold'}},
+      alternateRowStyles:{fillColor:[250,247,255]},
+      didParseCell:(d)=>{
+        if(d.section==='body'&&d.column.index===7){
+          const v=parseInt(d.cell.raw);
+          if(!isNaN(v)) d.cell.styles.textColor=v>=900?[26,107,92]:v>=800?[26,63,107]:[139,26,26];
+        }
+      }
+    });
+    y=doc.lastAutoTable.finalY+10;
+  }
+
+  // ── OBSERVAÇÕES ───────────────────────────────────────────
+  if(a.observacoes?.trim()){
+    checkY(30);
+    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30);
+    doc.text('Observações', M, y); y+=6;
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+    const lines=doc.splitTextToSize(a.observacoes,W-2*M);
+    lines.forEach(l=>{ checkY(6); doc.text(l,M,y); y+=5; });
+    y+=6;
+  }
+
+  // Rodapé em todas as páginas
+  const total=doc.internal.getNumberOfPages();
+  for(let p=1;p<=total;p++){
+    doc.setPage(p);
+    doc.setFontSize(7); doc.setTextColor(160,160,160); doc.setFont('helvetica','normal');
+    doc.text(`${a.nome} — Mentoria ENEM — Prof. Alisson Pedrosa`,M,292);
+    doc.text(`Pág. ${p}/${total}`,W-M,292,{align:'right'});
+  }
+
+  doc.save(`relatorio_${(a.nome||'aluno').replace(/\s+/g,'_').toLowerCase()}_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
 function importarErrosAluno(event){
