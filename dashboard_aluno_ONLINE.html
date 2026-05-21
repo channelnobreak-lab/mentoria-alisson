@@ -704,6 +704,24 @@ tr:hover td{background:var(--bg);}
         <div id="stat-materia-pct"></div>
       </div>
     </div>
+    <!-- análise por disciplina -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="card-title" style="margin-bottom:0">Análise por disciplina</div>
+        <select class="filter-select" id="disc-analise-sel" onchange="renderDiscAnalise()" style="margin-left:auto;min-width:180px">
+          <option value="">Selecione uma disciplina...</option>
+        </select>
+      </div>
+      <div id="disc-analise-body" style="display:none">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;align-items:start">
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-disc-analise" role="img" aria-label="Módulos por disciplina"></canvas></div>
+          <div id="disc-analise-lista"></div>
+        </div>
+        <div style="margin-top:14px" id="disc-analise-conteudos"></div>
+      </div>
+      <div id="disc-analise-empty" style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">Selecione uma disciplina para ver a análise detalhada.</div>
+    </div>
+
     <!-- top módulos -->
     <div class="card" style="padding:14px 16px;margin-bottom:14px">
       <div class="card-title">Módulos mais errados (top 10)</div>
@@ -2946,6 +2964,10 @@ function renderErros(){
   // ── ALGORITMO DE SUGESTÃO DE 15 CONTEÚDOS ────────────────
   renderSugestao(countM, countP, totalErros);
 
+  // ── Análise por disciplina ────────────────────────────────
+  populateDiscAnalise();
+  renderDiscAnalise();
+
   renderErrosList();
 }
 
@@ -3027,6 +3049,119 @@ function calcRecorrencia(modulo){
 
 // ── ALGORITMO DE SUGESTÃO DE 15 CONTEÚDOS ──────────────────────────────────
 // Score = erros(35%) + pré-requisito(45%) + recorrência ENEM(20%)
+// ══════════════════════════════════════════════════════════════
+// ANÁLISE POR DISCIPLINA
+// ══════════════════════════════════════════════════════════════
+function populateDiscAnalise(){
+  const sel=document.getElementById('disc-analise-sel');
+  if(!sel)return;
+  const prev=sel.value;
+  const materias=[...new Set(erros.map(e=>e.materia))].sort();
+  sel.innerHTML='<option value="">Selecione uma disciplina...</option>';
+  materias.forEach(m=>sel.innerHTML+=`<option value="${m}">${m}</option>`);
+  if(prev&&materias.includes(prev))sel.value=prev;
+}
+
+function renderDiscAnalise(){
+  const disc=document.getElementById('disc-analise-sel')?.value;
+  const body=document.getElementById('disc-analise-body');
+  const empty=document.getElementById('disc-analise-empty');
+  if(!disc){
+    if(body)body.style.display='none';
+    if(empty)empty.style.display='block';
+    return;
+  }
+  const errosDisc=erros.filter(e=>e.materia===disc);
+  if(!errosDisc.length){
+    if(body)body.style.display='none';
+    if(empty){empty.style.display='block';empty.textContent='Nenhum erro registrado para '+disc+'.';}
+    return;
+  }
+  if(body)body.style.display='block';
+  if(empty)empty.style.display='none';
+
+  const total=errosDisc.length;
+
+  // Agrupar por módulo
+  const byMod={};
+  errosDisc.forEach(e=>byMod[e.modulo]=(byMod[e.modulo]||0)+1);
+  const sortedMod=Object.entries(byMod).sort((a,b)=>b[1]-a[1]);
+
+  // Paleta de tons a partir da cor da disciplina
+  function hexToRgb(hex){const r=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);return r?{r:parseInt(r[1],16),g:parseInt(r[2],16),b:parseInt(r[3],16)}:null;}
+  function makeShades(baseHex,n){
+    const rgb=hexToRgb(baseHex)||{r:77,g:124,b:244};
+    return Array.from({length:n},(_,i)=>{
+      const t=n===1?0.7:(0.4+0.55*(i/(n-1)));
+      return `rgba(${Math.round(rgb.r*t+255*(1-t))},${Math.round(rgb.g*t+255*(1-t))},${Math.round(rgb.b*t+255*(1-t))},0.9)`;
+    });
+  }
+  const baseHex=(DISC_CORES&&DISC_CORES[disc])||'#4d7cf4';
+  const cleanHex=baseHex.startsWith('#')?baseHex:'#4d7cf4';
+  const shades=makeShades(cleanHex,sortedMod.length);
+
+  // Gráfico de donut
+  destroyChart('discAnalise');
+  const ctx=document.getElementById('chart-disc-analise');
+  if(ctx){
+    charts['discAnalise']=new Chart(ctx,{
+      type:'doughnut',
+      data:{
+        labels:sortedMod.map(([m])=>m.length>22?m.slice(0,20)+'…':m),
+        datasets:[{data:sortedMod.map(([,c])=>c),backgroundColor:shades,borderWidth:2,borderColor:'#fff'}]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:ctx=>{
+            const pct=(ctx.parsed/total*100).toFixed(1);
+            return ` ${ctx.parsed} erro${ctx.parsed>1?'s':''} (${pct}%)`;
+          }}}
+        }
+      }
+    });
+  }
+
+  // Lista lateral de módulos
+  const maxMod=sortedMod[0]?.[1]||1;
+  document.getElementById('disc-analise-lista').innerHTML=
+    sortedMod.map(([m,c],i)=>{
+      const pct=(c/total*100).toFixed(0);
+      const sh=shades[i]||'#4d7cf4';
+      return `<div class="ebar-row" style="margin-bottom:7px;align-items:center">
+        <span class="ebar-name" title="${m}" style="font-weight:500;color:var(--text)">${m.length>24?m.slice(0,22)+'…':m}</span>
+        <div class="ebar-track" style="width:80px"><div class="ebar-fill" style="width:${(c/maxMod*100).toFixed(0)}%;background:${sh}"></div></div>
+        <span class="ebar-val" style="color:var(--text)">${c}</span>
+        <span style="font-size:11px;color:var(--muted);min-width:34px;text-align:right">${pct}%</span>
+      </div>`;
+    }).join('');
+
+  // Conteúdos por módulo
+  const byCont={};
+  errosDisc.forEach(e=>{
+    const k=e.modulo+'|||'+e.conteudo;
+    byCont[k]=(byCont[k]||0)+1;
+  });
+  const sortedCont=Object.entries(byCont).sort((a,b)=>b[1]-a[1]);
+
+  document.getElementById('disc-analise-conteudos').innerHTML=
+    `<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Conteúdos específicos</div>`+
+    sortedCont.map(([k,c])=>{
+      const [mod,cont]=k.split('|||');
+      const pct=(c/total*100).toFixed(1);
+      const modIdx=sortedMod.findIndex(([m])=>m===mod);
+      const sh=shades[modIdx>=0?modIdx:0]||'#4d7cf4';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+        <span style="width:8px;height:8px;border-radius:50%;background:${sh};flex-shrink:0;display:inline-block"></span>
+        <span style="font-size:12px;color:var(--muted);flex-shrink:0">${mod.length>20?mod.slice(0,18)+'…':mod}</span>
+        <span style="font-size:13px;color:var(--text);flex:1">${cont}</span>
+        <span style="font-size:12px;font-weight:600;color:var(--text)">${c}×</span>
+        <span style="font-size:11px;color:var(--muted)">${pct}%</span>
+      </div>`;
+    }).join('');
+}
+
 function renderSugestao(countM, countP, totalErros){
   // Agregar erros por conteúdo
   const conteudoMap={};
