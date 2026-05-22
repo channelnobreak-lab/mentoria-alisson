@@ -145,7 +145,15 @@ async function carregarDadosAluno(user){
   initErrosSelects();
   buildSimSelect('err-simulado');
   await carregarCrono();
-  carregarOutrasProvas();
+
+  // Carregar outras provas do banco (prioritário sobre localStorage)
+  if(alunoData.outras_provas?.length){
+    outrasProvas=(alunoData.outras_provas||[]).map(p=>({nome:p.nome,mats:p.mats}));
+    opSelected=new Set(outrasProvas.map((_,i)=>i));
+  } else {
+    carregarOutrasProvas(); // fallback localStorage
+  }
+
   carregarCalendario();
 
   // Atualizar header com nome e objetivo
@@ -3649,6 +3657,19 @@ function renderOpChart(){
 
 function salvarOutrasProvas(){
   try{_setItem('op_'+config.nome,JSON.stringify(outrasProvas));}catch(e){}
+  // Sincronizar com Supabase
+  if(supaMode && supaAlunoId){
+    (async()=>{
+      try{
+        await supa.from('outras_provas').delete().eq('aluno_id', supaAlunoId);
+        if(outrasProvas.length){
+          await supa.from('outras_provas').insert(
+            outrasProvas.map(p=>({aluno_id:supaAlunoId, nome:p.nome, mats:p.mats}))
+          );
+        }
+      }catch(e){ console.error('Erro ao salvar outras provas:', e); }
+    })();
+  }
 }
 function carregarOutrasProvas(){
   try{
