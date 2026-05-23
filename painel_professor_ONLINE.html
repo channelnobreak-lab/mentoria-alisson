@@ -3629,9 +3629,12 @@ let agendaSemQ    = 1;
 let agendaSemData = null; // Date da segunda-feira exibida
 let agDragSrc     = null; // para drag & drop
 
-function agLocalCor(nomeAluno, localOverride){
-  const local = localOverride || alunos.find(x=>x.nome===nomeAluno)?.local || '';
-  return LOCAL_COR[local] || LOCAL_COR[''];
+function agLocalCor(nomeAluno){
+  // Busca exata primeiro, depois parcial (primeiro nome)
+  const primeiroNome = nomeAluno.split(' ')[0].toLowerCase();
+  const a = alunos.find(x=>x.nome===nomeAluno)
+         || alunos.find(x=>x.nome?.toLowerCase().startsWith(primeiroNome));
+  return LOCAL_COR[a?.local||''] || LOCAL_COR[''];
 }
 
 // ── Carregamento ──────────────────────────────────────────────
@@ -3857,7 +3860,7 @@ function agendaSemRender(){
       const slot = grade.find(g=>g.dia_semana===dia&&g.horario===hr);
       const data = dataPorDia[dia];
       if(!slot){
-        html+=`<td style="padding:4px 6px" data-dia="${dia}" data-hora="${hr}" data-data="${data}"
+        html+=`<td style="padding:4px 6px" data-slotid="" data-dia="${dia}" data-hora="${hr}" data-data="${data}"
           ondragover="event.preventDefault()" ondrop="agSemDrop(event)">
           <div style="border:1.5px dashed var(--border2);border-radius:6px;height:42px;min-width:90px"></div>
         </td>`;
@@ -3868,17 +3871,14 @@ function agendaSemRender(){
       const sessao  = agendaSessoes.find(s=>s.grade_id===slot.id&&s.data===data);
       const nome = excecao ? '(cancelado)' : (sessao?.nome_aluno||slot.nome_aluno);
       const cor  = sessao ? (STATUS_COR[sessao.status]||STATUS_COR.agendado) : agLocalCor(slot.nome_aluno);
-      const corBg = sessao ? cor.bg : agLocalCor(slot.nome_aluno).bg;
-      const corBorder = sessao ? cor.border : agLocalCor(slot.nome_aluno).border;
-      const corTxt = sessao ? cor.txt : agLocalCor(slot.nome_aluno).txt;
-      html+=`<td style="padding:4px 6px" data-dia="${dia}" data-hora="${hr}" data-data="${data}"
+      html+=`<td style="padding:4px 6px" data-slotid="${slot.id}" data-dia="${dia}" data-hora="${hr}" data-data="${data}"
         ondragover="event.preventDefault()" ondrop="agSemDrop(event)">
-        <div draggable="true" data-slot="${slot.id}" data-data="${data}" data-nome="${slot.nome_aluno}"
+        <div draggable="true"
           ondragstart="agSemDragStart(event,'${slot.id}','${data}','${slot.nome_aluno}')"
           onclick="agendaModalSessao('${slot.id}','${data}','${hr}','${sessao?sessao.nome_aluno:slot.nome_aluno}','${sessao?.id||''}')"
-          style="background:${corBg};border:1px solid ${corBorder};border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;min-width:90px">
-          <div style="font-weight:600;color:${corTxt}">${nome.split(' ')[0]}</div>
-          <div style="font-size:10px;color:${corTxt};opacity:.8">${sessao?(STATUS_COR[sessao.status]?.label||''):'Agendado'}</div>
+          style="background:${cor.bg};border:1px solid ${cor.border};border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;min-width:90px">
+          <div style="font-weight:600;color:${cor.txt}">${nome.split(' ')[0]}</div>
+          <div style="font-size:10px;color:${cor.txt};opacity:.8">${sessao?(STATUS_COR[sessao.status]?.label||''):'Agendado'}</div>
         </div>
       </td>`;
     });
@@ -3927,19 +3927,18 @@ function agSemDragStart(e, slotId, data, nome){
 async function agSemDrop(e){
   e.preventDefault(); e.stopPropagation();
   if(!agSemDragSlot) return;
-  // Encontrar td mais próxima com data-data
-  const td = e.target.closest('td[data-data]');
-  if(!td){ agSemDragSlot=null; return; }
-  const dataDest = td.dataset.data;
-  const horaDest = td.dataset.hora;
-  const divDest  = td.querySelector('[data-slot]');
-  const slotDestId = divDest?.dataset?.slot||null;
+  const td = e.currentTarget;
+  const dataDest  = td.dataset.data;
+  const horaDest  = td.dataset.hora;
+  const slotDestId = td.dataset.slotid||null;
+
+  if(!dataDest){ agSemDragSlot=null; return; }
+
+  // Não fazer nada se drop no mesmo slot
+  if(slotDestId && slotDestId===agSemDragSlot.slotId){ agSemDragSlot=null; return; }
 
   const slotOrig = agendaGrade.find(g=>g.id===agSemDragSlot.slotId);
   if(!slotOrig){ agSemDragSlot=null; return; }
-
-  // Não fazer nada se drop no mesmo slot
-  if(slotDestId===agSemDragSlot.slotId){ agSemDragSlot=null; return; }
 
   const cancelOrig = {
     grade_id:agSemDragSlot.slotId, nome_aluno:agSemDragSlot.nome,
@@ -3950,7 +3949,6 @@ async function agSemDrop(e){
 
   let novaSessao;
   if(slotDestId){
-    // Drop em slot com aluno — move para o horário desse slot
     const slotDest = agendaGrade.find(g=>g.id===slotDestId);
     novaSessao = {
       grade_id:slotDestId, nome_aluno:agSemDragSlot.nome,
@@ -3959,7 +3957,6 @@ async function agSemDrop(e){
       atualizado_em:new Date().toISOString()
     };
   } else {
-    // Drop em célula vazia — usa o horário da linha
     novaSessao = {
       grade_id:null, nome_aluno:agSemDragSlot.nome,
       data:dataDest, horario:horaDest,
