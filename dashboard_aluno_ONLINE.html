@@ -1589,9 +1589,30 @@ function cronoGerarCronograma(){
   const areasBloqueadas = config.areasBloqueadas || [];
   const AREA_SIGLA = {'CN':'CN','CH':'CH','LCT':'LCT','MAT':'MAT'};
 
+  // Conteúdos já concluídos com bom aproveitamento — não reentram na fila
+  // EXCETO se a aluna registrou novo erro nesse conteúdo após a conclusão
+  const dominados = new Set(
+    cronograma
+      .filter(c => c.concluido && c.tipo !== 'simulado' && c.tipo !== 'redacao')
+      .filter(c => {
+        if(!c.exQtd || c.exQtd === 0) return true; // concluído sem exercícios = considera dominado
+        return (c.exAcertos / c.exQtd) >= 0.70;
+      })
+      .filter(c => {
+        // Se houver erro registrado nesse conteúdo, não é dominado — volta como revisão
+        const temErroNovo = erros.some(e => e.materia === c.materia && e.conteudo === c.conteudo);
+        return !temErroNovo;
+      })
+      .map(c => c.materia + '||' + c.modulo + '||' + c.conteudo)
+  );
+
   const fila = Object.values(conteudoMap).filter(item=>{
     const area = MAT_AREA_CRONO[item.materia]||'CN';
-    return !areasBloqueadas.includes(area);
+    if(areasBloqueadas.includes(area)) return false;
+    // Excluir conteúdos já dominados
+    const k = item.materia+'||'+item.modulo+'||'+item.conteudo;
+    if(dominados.has(k)) return false;
+    return true;
   }).map(item=>{
     const {materia,modulo,conteudo,count}=item;
     // Normaliza pela qtd esperada de questões por matéria — elimina viés de volume
@@ -1604,8 +1625,12 @@ function cronoGerarCronograma(){
     const freq=((ENEM_RECORRENCIA[modulo]||2)-1)/2;
     const area=MAT_AREA_CRONO[materia]||'CN';
     const score=(erroScore*0.35+prereq*0.45+freq*0.20)*(1+pesArea[area]*0.4);
-    const jaConcluido=cronograma.find(c=>c.conteudo===conteudo&&c.materia===materia&&c.concluido);
-    return {materia,modulo,conteudo,area,score,eRevisao:!!jaConcluido};
+    const sessaoAnterior=cronograma.find(c=>c.conteudo===conteudo&&c.materia===materia&&c.concluido);
+    const erroAposEstudo = sessaoAnterior && erros.some(e=>e.materia===materia&&e.conteudo===conteudo);
+    const eRevisao = sessaoAnterior
+      ? (erroAposEstudo || (sessaoAnterior.exQtd > 0 && (sessaoAnterior.exAcertos/sessaoAnterior.exQtd) < 0.70))
+      : false;
+    return {materia,modulo,conteudo,area,score,eRevisao};
   }).sort((a,b)=>b.score-a.score);
 
   // 3. Separar por área e montar fila alternada
