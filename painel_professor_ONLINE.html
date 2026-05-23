@@ -3537,6 +3537,7 @@ async function carregarDadosSupa(){
   } else {
     console.error('supaCarregarAlunos retornou null');
   }
+  await agendaCarregar();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3799,11 +3800,6 @@ showOverviewTab = function(id, btn){
     agendaSetQuinzena(agendaQuinzena);
   }
 };
-
-// Carregar agenda junto com os outros dados
-(async()=>{
-  await agendaCarregar();
-})();
 
 // ── SOBRESCREVER salvarAluno para sincronizar ─────────────────
 const _salvarAlunoOriginal = salvarAluno;
