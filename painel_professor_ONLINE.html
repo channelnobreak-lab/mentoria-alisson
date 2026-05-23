@@ -420,6 +420,7 @@ tr:hover td{background:var(--bg);}
         <button class="painel-nav-btn" onclick="showOverviewTab('alertas',this)">⚠ Alertas</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('alunos-cadastrados',this)">Alunos cadastrados</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('acessos',this)">🔐 Acessos</button>
+        <button class="painel-nav-btn" onclick="showOverviewTab('agenda',this)">📅 Agenda</button>
       </div>
 
       <!-- GERAL -->
@@ -587,6 +588,91 @@ tr:hover td{background:var(--bg);}
               <tbody id="alunos-tbody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════ -->
+    <!-- ABA AGENDA                                          -->
+    <!-- ══════════════════════════════════════════════════ -->
+    <div id="ov-agenda" class="painel-section">
+
+      <!-- Cabeçalho da agenda -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="font-size:16px;font-weight:700;color:var(--text)">📅 Agenda de atendimentos</div>
+        <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-secondary" id="agenda-q1-btn" onclick="agendaSetQuinzena(1)" style="font-size:12px;padding:5px 14px">Quinzena 1</button>
+          <button class="btn btn-secondary" id="agenda-q2-btn" onclick="agendaSetQuinzena(2)" style="font-size:12px;padding:5px 14px">Quinzena 2</button>
+          <div style="width:1px;height:24px;background:var(--border2)"></div>
+          <input type="date" id="agenda-data-ref" class="form-input" style="font-size:12px;padding:5px 10px;width:auto" onchange="agendaRender()">
+          <button class="btn btn-primary" onclick="agendaGerarSemana()" style="font-size:12px;padding:5px 14px">↻ Gerar semana</button>
+        </div>
+      </div>
+
+      <!-- Grade semanal -->
+      <div id="agenda-grade-wrap" style="overflow-x:auto;margin-bottom:20px">
+        <div id="agenda-grade"></div>
+      </div>
+
+      <!-- Sessões da semana -->
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">Sessões da semana</div>
+          <span id="agenda-semana-label" style="font-size:12px;color:var(--muted)"></span>
+          <button class="btn btn-secondary" onclick="agendaModalSessao()" style="margin-left:auto;font-size:12px;padding:5px 12px">+ Avulso</button>
+        </div>
+        <div id="agenda-sessoes-lista"></div>
+      </div>
+    </div>
+
+    <!-- MODAL DE SESSÃO -->
+    <div class="modal-overlay" id="modal-agenda-sessao">
+      <div class="modal" style="max-width:520px">
+        <div class="modal-title" id="modal-agenda-titulo">Registrar atendimento</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div>
+            <label class="form-label">Aluno</label>
+            <input class="form-input" id="ag-nome" type="text" placeholder="Nome do aluno" list="ag-nome-list">
+            <datalist id="ag-nome-list"></datalist>
+          </div>
+          <div>
+            <label class="form-label">Data</label>
+            <input class="form-input" id="ag-data" type="date">
+          </div>
+          <div>
+            <label class="form-label">Horário</label>
+            <input class="form-input" id="ag-horario" type="time">
+          </div>
+          <div>
+            <label class="form-label">Duração (min)</label>
+            <input class="form-input" id="ag-duracao" type="number" min="10" max="180" placeholder="30">
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label class="form-label">Status</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary ag-status-btn active" data-status="realizado" onclick="agendaSetStatus(this)">✅ Realizado</button>
+            <button class="btn btn-secondary ag-status-btn" data-status="cancelado" onclick="agendaSetStatus(this)">❌ Cancelado</button>
+            <button class="btn btn-secondary ag-status-btn" data-status="reagendado" onclick="agendaSetStatus(this)">🔄 Reagendado</button>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label class="form-label">Pauta</label>
+          <textarea class="form-input" id="ag-pauta" rows="2" placeholder="O que foi planejado para essa sessão..." style="resize:vertical"></textarea>
+        </div>
+        <div style="margin-bottom:10px">
+          <label class="form-label">Anotações da sessão</label>
+          <textarea class="form-input" id="ag-anotacoes" rows="3" placeholder="O que aconteceu na sessão, pontos discutidos..." style="resize:vertical"></textarea>
+        </div>
+        <div style="margin-bottom:16px">
+          <label class="form-label">Encaminhamentos</label>
+          <textarea class="form-input" id="ag-encaminhamentos" rows="2" placeholder="Próximos passos, tarefas, recados..." style="resize:vertical"></textarea>
+        </div>
+        <input type="hidden" id="ag-sessao-id">
+        <input type="hidden" id="ag-grade-id">
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal('modal-agenda-sessao')">Cancelar</button>
+          <button class="btn btn-primary" onclick="agendaSalvarSessao()">Salvar</button>
         </div>
       </div>
     </div>
@@ -2486,13 +2572,15 @@ function baixarDadosIA(){
 // ── Relatório PDF do aluno ────────────────────────────────────
 async function gerarRelatorioPDF(){
   if(!alunoAtual){alert('Selecione um aluno.');return;}
-  // Carregar jsPDF + AutoTable
-  if(typeof window.jspdf==='undefined'){
-    await Promise.all([
-      new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);}),
-      new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);})
-    ]);
-  }
+  // Carregar jsPDF + AutoTable via unpkg
+  try{
+    if(typeof window.jspdf==='undefined'){
+      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    }
+    if(typeof window.jspdf?.jsPDF?.prototype?.autoTable==='undefined'){
+      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    }
+  }catch(e){alert('Erro ao carregar biblioteca de PDF. Verifique sua conexão.');return;}
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   const a=alunoAtual;
@@ -3450,6 +3538,272 @@ async function carregarDadosSupa(){
     console.error('supaCarregarAlunos retornou null');
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// AGENDA DE ATENDIMENTOS
+// ══════════════════════════════════════════════════════════════
+
+let agendaQuinzena = 1;
+let agendaGrade = [];    // slots da grade fixa
+let agendaSessoes = [];  // sessões registradas
+let agendaDataRef = null; // segunda-feira da semana exibida
+
+const DIAS_AGENDA = ['seg','ter','qua','qui','sex','sab'];
+const DIAS_AGENDA_LABEL = {seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'};
+const DIAS_JS = {seg:1,ter:2,qua:3,qui:4,sex:5,sab:6}; // getDay()
+
+const STATUS_COR = {
+  agendado:   {bg:'#EEF4FF',border:'#4d7cf4',txt:'#1A3F6B',label:'Agendado'},
+  realizado:  {bg:'#EDFAF3',border:'#1A6B5C',txt:'#1A6B5C',label:'✅ Realizado'},
+  cancelado:  {bg:'#FFF0F0',border:'#8B1A1A',txt:'#8B1A1A',label:'❌ Cancelado'},
+  reagendado: {bg:'#FFF8E8',border:'#B8860B',txt:'#7D5A00',label:'🔄 Reagendado'},
+};
+
+async function agendaCarregar(){
+  if(!supaMode) return;
+  try{
+    const [g, s] = await Promise.all([
+      supa.from('agenda_grade').select('*').eq('ativo',true).order('horario'),
+      supa.from('agenda_sessoes').select('*').order('data').order('horario')
+    ]);
+    agendaGrade   = g.data || [];
+    agendaSessoes = s.data || [];
+  }catch(e){ console.error('Erro ao carregar agenda:', e); }
+}
+
+function agendaSetQuinzena(q){
+  agendaQuinzena = q;
+  document.getElementById('agenda-q1-btn').style.background = q===1?'var(--accent)':'';
+  document.getElementById('agenda-q1-btn').style.color      = q===1?'#fff':'';
+  document.getElementById('agenda-q2-btn').style.background = q===2?'var(--accent)':'';
+  document.getElementById('agenda-q2-btn').style.color      = q===2?'#fff':'';
+  agendaRender();
+}
+
+function agendaGetSegunda(ref){
+  const d = ref ? new Date(ref+'T12:00:00') : new Date();
+  const dow = d.getDay();
+  const diff = dow===0 ? -6 : 1-dow;
+  d.setDate(d.getDate()+diff);
+  return d;
+}
+
+function agendaFmtDate(d){
+  return d.toISOString().slice(0,10);
+}
+
+function agendaGerarSemana(){
+  const ref = document.getElementById('agenda-data-ref').value;
+  agendaDataRef = agendaGetSegunda(ref||null);
+  agendaRender();
+}
+
+function agendaRender(){
+  if(!agendaDataRef) agendaDataRef = agendaGetSegunda(null);
+
+  // Atualizar label da semana
+  const fim = new Date(agendaDataRef);
+  fim.setDate(fim.getDate()+5);
+  document.getElementById('agenda-semana-label').textContent =
+    `${agendaDataRef.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} – ${fim.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`;
+
+  // Filtrar grade da quinzena
+  const grade = agendaGrade.filter(g=>g.quinzena===agendaQuinzena);
+
+  // Dias que têm atendimento nessa quinzena
+  const diasComSlot = [...new Set(grade.map(g=>g.dia_semana))];
+  const diasOrdenados = DIAS_AGENDA.filter(d=>diasComSlot.includes(d));
+
+  // Datas reais da semana por dia
+  const dataPorDia = {};
+  diasOrdenados.forEach(dia=>{
+    const jsDay = DIAS_JS[dia];
+    const d = new Date(agendaDataRef);
+    let diff = jsDay - d.getDay();
+    if(diff<0) diff+=7;
+    d.setDate(d.getDate()+diff);
+    dataPorDia[dia] = agendaFmtDate(d);
+  });
+
+  // ── Grade visual ──────────────────────────────────────────
+  const horarios = [...new Set(grade.map(g=>g.horario))].sort();
+
+  let html = `<table style="border-collapse:collapse;min-width:600px;width:100%">
+    <thead><tr>
+      <th style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:left;border-bottom:1px solid var(--border2);white-space:nowrap">Horário</th>`;
+  diasOrdenados.forEach(dia=>{
+    const data = dataPorDia[dia];
+    const d = new Date(data+'T12:00:00');
+    html+=`<th style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center;border-bottom:1px solid var(--border2);white-space:nowrap">
+      ${DIAS_AGENDA_LABEL[dia]}<br><span style="font-weight:400">${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span>
+    </th>`;
+  });
+  html+=`</tr></thead><tbody>`;
+
+  horarios.forEach((hr,i)=>{
+    html+=`<tr style="background:${i%2===0?'var(--surface)':'var(--surface2)'}">
+      <td style="padding:5px 10px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap">${hr.slice(0,5)}</td>`;
+    diasOrdenados.forEach(dia=>{
+      const slot = grade.find(g=>g.dia_semana===dia&&g.horario===hr);
+      if(!slot){html+=`<td style="padding:4px 6px"></td>`;return;}
+      const data = dataPorDia[dia];
+      const sessao = agendaSessoes.find(s=>s.grade_id===slot.id&&s.data===data)
+                  || agendaSessoes.find(s=>s.nome_aluno===slot.nome_aluno&&s.data===data&&s.horario===hr);
+      const cor = sessao ? STATUS_COR[sessao.status]||STATUS_COR.agendado : STATUS_COR.agendado;
+      html+=`<td style="padding:4px 6px">
+        <div onclick="agendaModalSessao('${slot.id}','${data}','${hr}','${slot.nome_aluno}',${sessao?`'${sessao.id}'`:'null'})"
+          style="background:${cor.bg};border:1px solid ${cor.border};border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;min-width:100px">
+          <div style="font-weight:600;color:${cor.txt};margin-bottom:1px">${slot.nome_aluno.split(' ')[0]}</div>
+          <div style="color:${cor.txt};opacity:.8">${cor.label}</div>
+        </div>
+      </td>`;
+    });
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('agenda-grade').innerHTML = html;
+
+  // ── Lista de sessões da semana ────────────────────────────
+  const datasemana = Object.values(dataPorDia);
+  const sessoesSemana = agendaSessoes.filter(s=>datasemana.includes(s.data))
+    .sort((a,b)=>a.data.localeCompare(b.data)||a.horario.localeCompare(b.horario));
+
+  // Agrupar por dia
+  const porDia = {};
+  sessoesSemana.forEach(s=>{
+    if(!porDia[s.data]) porDia[s.data]=[];
+    porDia[s.data].push(s);
+  });
+
+  let listaHtml = '';
+  if(!sessoesSemana.length){
+    listaHtml=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">
+      Nenhuma sessão registrada ainda. Clique em um slot da grade para registrar.
+    </div>`;
+  } else {
+    Object.entries(porDia).sort(([a],[b])=>a.localeCompare(b)).forEach(([data,sessoes])=>{
+      const d = new Date(data+'T12:00:00');
+      listaHtml+=`<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">${d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'})}</div>`;
+      sessoes.forEach(s=>{
+        const cor = STATUS_COR[s.status]||STATUS_COR.agendado;
+        listaHtml+=`<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:${cor.bg};border:1px solid ${cor.border};border-radius:8px;margin-bottom:6px;cursor:pointer"
+          onclick="agendaModalSessao(null,'${s.data}','${s.horario}','${s.nome_aluno}','${s.id}')">
+          <div style="min-width:40px;font-weight:700;color:${cor.txt};font-size:12px">${s.horario.slice(0,5)}</div>
+          <div style="flex:1">
+            <div style="font-weight:600;color:var(--text);font-size:13px">${s.nome_aluno} <span style="font-size:11px;color:${cor.txt}">${cor.label}</span></div>
+            ${s.anotacoes?`<div style="font-size:12px;color:var(--muted);margin-top:3px">${s.anotacoes.slice(0,120)}${s.anotacoes.length>120?'…':''}</div>`:''}
+            ${s.encaminhamentos?`<div style="font-size:11px;color:var(--accent);margin-top:2px">→ ${s.encaminhamentos.slice(0,80)}${s.encaminhamentos.length>80?'…':''}</div>`:''}
+          </div>
+          ${s.duracao_min?`<div style="font-size:11px;color:var(--muted);white-space:nowrap">${s.duracao_min}min</div>`:''}
+        </div>`;
+      });
+    });
+  }
+  document.getElementById('agenda-sessoes-lista').innerHTML = listaHtml;
+
+  // Popular datalist de nomes
+  const dl = document.getElementById('ag-nome-list');
+  if(dl){
+    const nomes = [...new Set(agendaGrade.map(g=>g.nome_aluno))].sort();
+    dl.innerHTML = nomes.map(n=>`<option value="${n}">`).join('');
+  }
+}
+
+function agendaSetStatus(btn){
+  document.querySelectorAll('.ag-status-btn').forEach(b=>{
+    b.style.background=''; b.style.color=''; b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  const cor = STATUS_COR[btn.dataset.status];
+  if(cor){ btn.style.background=cor.border; btn.style.color='#fff'; }
+}
+
+function agendaModalSessao(gradeId=null, data=null, horario=null, nome=null, sessaoId=null){
+  document.getElementById('modal-agenda-titulo').textContent = sessaoId ? 'Editar atendimento' : 'Registrar atendimento';
+  document.getElementById('ag-grade-id').value  = gradeId||'';
+  document.getElementById('ag-sessao-id').value = sessaoId||'';
+  document.getElementById('ag-nome').value      = nome||'';
+  document.getElementById('ag-data').value      = data||agendaFmtDate(new Date());
+  document.getElementById('ag-horario').value   = horario||'';
+  document.getElementById('ag-duracao').value   = '';
+  document.getElementById('ag-pauta').value     = '';
+  document.getElementById('ag-anotacoes').value = '';
+  document.getElementById('ag-encaminhamentos').value = '';
+
+  // Resetar status
+  document.querySelectorAll('.ag-status-btn').forEach(b=>{ b.style.background=''; b.style.color=''; b.classList.remove('active'); });
+  document.querySelector('.ag-status-btn[data-status="realizado"]').click();
+
+  // Se sessão existente, preencher
+  if(sessaoId){
+    const s = agendaSessoes.find(x=>x.id===sessaoId);
+    if(s){
+      document.getElementById('ag-duracao').value   = s.duracao_min||'';
+      document.getElementById('ag-pauta').value     = s.pauta||'';
+      document.getElementById('ag-anotacoes').value = s.anotacoes||'';
+      document.getElementById('ag-encaminhamentos').value = s.encaminhamentos||'';
+      const statusBtn = document.querySelector(`.ag-status-btn[data-status="${s.status}"]`);
+      if(statusBtn) statusBtn.click();
+    }
+  }
+  document.getElementById('modal-agenda-sessao').classList.add('open');
+}
+
+async function agendaSalvarSessao(){
+  const nome     = document.getElementById('ag-nome').value.trim();
+  const data     = document.getElementById('ag-data').value;
+  const horario  = document.getElementById('ag-horario').value;
+  const duracao  = parseInt(document.getElementById('ag-duracao').value)||null;
+  const pauta    = document.getElementById('ag-pauta').value.trim();
+  const anot     = document.getElementById('ag-anotacoes').value.trim();
+  const encam    = document.getElementById('ag-encaminhamentos').value.trim();
+  const gradeId  = document.getElementById('ag-grade-id').value||null;
+  const sessaoId = document.getElementById('ag-sessao-id').value||null;
+  const statusBtn= document.querySelector('.ag-status-btn.active');
+  const status   = statusBtn ? statusBtn.dataset.status : 'realizado';
+
+  if(!nome||!data||!horario){ alert('Preencha pelo menos nome, data e horário.'); return; }
+
+  // Tentar vincular aluno_id
+  const alunoMatch = alunos.find(a=>a.nome&&a.nome.toLowerCase().includes(nome.toLowerCase().split(' ')[0]));
+  const alunoId = alunoMatch?.id||null;
+
+  const payload = { nome_aluno:nome, data, horario, duracao_min:duracao, status, pauta, anotacoes:anot, encaminhamentos:encam, grade_id:gradeId, aluno_id:alunoId, atualizado_em:new Date().toISOString() };
+
+  if(supaMode){
+    try{
+      if(sessaoId){
+        const {error}=await supa.from('agenda_sessoes').update(payload).eq('id',sessaoId);
+        if(error) throw error;
+        const idx=agendaSessoes.findIndex(s=>s.id===sessaoId);
+        if(idx>=0) agendaSessoes[idx]={...agendaSessoes[idx],...payload};
+      } else {
+        const {data:novo,error}=await supa.from('agenda_sessoes').insert({...payload}).select().single();
+        if(error) throw error;
+        agendaSessoes.push(novo);
+      }
+    }catch(e){ alert('Erro ao salvar: '+e.message); return; }
+  }
+
+  closeModal('modal-agenda-sessao');
+  agendaRender();
+}
+
+// Inicializar agenda quando a aba for aberta
+const _showOverviewTabOrig = showOverviewTab;
+showOverviewTab = function(id, btn){
+  _showOverviewTabOrig(id, btn);
+  if(id==='agenda'){
+    if(!agendaDataRef) agendaDataRef = agendaGetSegunda(null);
+    document.getElementById('agenda-data-ref').value = agendaFmtDate(agendaDataRef);
+    agendaSetQuinzena(agendaQuinzena);
+  }
+};
+
+// Carregar agenda junto com os outros dados
+(async()=>{
+  await agendaCarregar();
+})();
 
 // ── SOBRESCREVER salvarAluno para sincronizar ─────────────────
 const _salvarAlunoOriginal = salvarAluno;
