@@ -593,12 +593,11 @@ tr:hover td{background:var(--bg);}
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ══════════════════════════════════════════════════ -->
-    <!-- ABA AGENDA                                          -->
-    <!-- ══════════════════════════════════════════════════ -->
-    <div id="ov-agenda" class="painel-section">
+      <!-- ══════════════════════════════════════════════════ -->
+      <!-- ABA AGENDA                                          -->
+      <!-- ══════════════════════════════════════════════════ -->
+      <div id="ov-agenda" class="painel-section">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
         <div style="font-size:16px;font-weight:700;color:var(--text)">📅 Agenda</div>
         <div style="display:flex;gap:4px;margin-left:16px;background:var(--surface2);border-radius:8px;padding:3px">
@@ -637,7 +636,8 @@ tr:hover td{background:var(--bg);}
         <div id="ag-sem-grade" style="overflow-x:auto;margin-bottom:16px"></div>
         <div class="card"><div class="card-title">Sessões registradas</div><div id="ag-sem-lista"></div></div>
       </div>
-    </div>
+    </div><!-- fim ov-agenda -->
+    </div><!-- fim overview-panel -->
 
     <!-- MODAL SLOT DA GRADE -->
     <div class="modal-overlay" id="modal-ag-slot">
@@ -656,6 +656,14 @@ tr:hover td{background:var(--bg);}
         <div style="margin-bottom:12px"><label class="form-label">Aluno</label>
           <input class="form-input" id="slot-aluno" type="text" list="slot-aluno-list" placeholder="Nome do aluno">
           <datalist id="slot-aluno-list"></datalist>
+        </div>
+        <div style="margin-bottom:12px"><label class="form-label">Local de atendimento</label>
+          <select class="form-input" id="slot-local">
+            <option value="">— Selecione —</option>
+            <option value="Asa Sul">Asa Sul</option>
+            <option value="Taguatinga">Taguatinga</option>
+            <option value="Online">Online</option>
+          </select>
         </div>
         <input type="hidden" id="slot-id">
         <div class="modal-actions">
@@ -3621,9 +3629,9 @@ let agendaSemQ    = 1;
 let agendaSemData = null; // Date da segunda-feira exibida
 let agDragSrc     = null; // para drag & drop
 
-function agLocalCor(nomeAluno){
-  const a = alunos.find(x=>x.nome===nomeAluno);
-  return LOCAL_COR[a?.local||''] || LOCAL_COR[''];
+function agLocalCor(nomeAluno, localOverride){
+  const local = localOverride || alunos.find(x=>x.nome===nomeAluno)?.local || '';
+  return LOCAL_COR[local] || LOCAL_COR[''];
 }
 
 // ── Carregamento ──────────────────────────────────────────────
@@ -3668,17 +3676,11 @@ function agendaCfgSetQ(q){
 
 function agendaCfgRender(){
   const grade = agendaGrade.filter(g=>g.quinzena===agendaCfgQ);
-  const dias = [...new Set(grade.map(g=>g.dia_semana))];
-  const diasOrd = DIAS_AG.filter(d=>dias.includes(d));
+  let html = `<div style="display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:10px">`;
 
-  // Adicionar dias sem slot para drop zone
-  const todosDias = DIAS_AG;
-
-  let html = `<div style="display:grid;grid-template-columns:repeat(${Math.max(todosDias.length,1)},minmax(130px,1fr));gap:10px">`;
-
-  todosDias.forEach(dia=>{
+  DIAS_AG.forEach(dia=>{
     const slots = grade.filter(g=>g.dia_semana===dia).sort((a,b)=>a.horario.localeCompare(b.horario));
-    html+=`<div class="ag-col" data-dia="${dia}" style="min-height:60px"
+    html+=`<div data-dia="${dia}" style="min-height:60px"
       ondragover="event.preventDefault()" ondrop="agCfgDrop(event,'${dia}')">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding:4px 0;border-bottom:1px solid var(--border2)">${DIAS_LABEL[dia]}</div>`;
     slots.forEach(s=>{
@@ -3691,16 +3693,10 @@ function agendaCfgRender(){
         <div style="color:${cor.txt};opacity:.9;word-break:break-word">${s.nome_aluno}</div>
       </div>`;
     });
-    // Drop zone vazia
-    html+=`<div style="border:1.5px dashed var(--border2);border-radius:6px;padding:6px;text-align:center;font-size:10px;color:var(--muted);cursor:pointer;margin-top:4px"
-      onclick="agendaCfgAddSlot('${dia}')" ondragover="event.preventDefault()" ondrop="agCfgDrop(event,'${dia}')">+ add</div>`;
+    html+=`<div ondragover="event.preventDefault()" ondrop="agCfgDrop(event,'${dia}')"
+      onclick="agendaCfgAddSlot('${dia}')"
+      style="border:1.5px dashed var(--border2);border-radius:6px;padding:8px;text-align:center;font-size:10px;color:var(--muted);cursor:pointer;margin-top:4px;min-height:32px">+ add</div>`;
     html+=`</div>`;
-  });
-
-  // Coluna extra para dias sem slot
-  const diasSem = DIAS_AG.filter(d=>!diasOrd.includes(d));
-  diasSem.forEach(dia=>{
-    // já incluídos acima
   });
 
   html+=`</div>`;
@@ -3732,6 +3728,7 @@ function agendaCfgAddSlot(dia='seg'){
   document.getElementById('slot-dia').value = dia;
   document.getElementById('slot-hora').value = '';
   document.getElementById('slot-aluno').value = '';
+  document.getElementById('slot-local').value = '';
   document.getElementById('slot-remover-btn').style.display = 'none';
   document.getElementById('modal-ag-slot').classList.add('open');
 }
@@ -3744,15 +3741,19 @@ function agendaEditSlot(id){
   document.getElementById('slot-dia').value = slot.dia_semana;
   document.getElementById('slot-hora').value = slot.horario.slice(0,5);
   document.getElementById('slot-aluno').value = slot.nome_aluno;
+  // Local vem do aluno cadastrado
+  const localAluno = alunos.find(a=>a.nome===slot.nome_aluno)?.local||'';
+  document.getElementById('slot-local').value = localAluno;
   document.getElementById('slot-remover-btn').style.display = '';
   document.getElementById('modal-ag-slot').classList.add('open');
 }
 
 async function agendaSalvarSlot(){
-  const id      = document.getElementById('slot-id').value;
-  const dia     = document.getElementById('slot-dia').value;
-  const hora    = document.getElementById('slot-hora').value;
-  const nome    = document.getElementById('slot-aluno').value.trim();
+  const id    = document.getElementById('slot-id').value;
+  const dia   = document.getElementById('slot-dia').value;
+  const hora  = document.getElementById('slot-hora').value;
+  const nome  = document.getElementById('slot-aluno').value.trim();
+  const local = document.getElementById('slot-local').value;
   if(!hora||!nome){ alert('Preencha horário e aluno.'); return; }
   const payload = { quinzena:agendaCfgQ, dia_semana:dia, horario:hora, nome_aluno:nome, ativo:true };
   if(supaMode){
@@ -3763,6 +3764,16 @@ async function agendaSalvarSlot(){
     } else {
       const {data,error} = await supa.from('agenda_grade').insert(payload).select().single();
       if(!error) agendaGrade.push(data);
+    }
+    // Se o local foi definido no modal, salvar no aluno cadastrado
+    if(local){
+      const alunoIdx = alunos.findIndex(a=>a.nome===nome);
+      if(alunoIdx>=0 && alunos[alunoIdx].local!==local){
+        alunos[alunoIdx].local = local;
+        const aId = alunos[alunoIdx].id;
+        const isUUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aId||'');
+        if(isUUID) await supa.from('alunos').update({local}).eq('id',aId);
+      }
     }
   }
   closeModal('modal-ag-slot');
@@ -3844,8 +3855,14 @@ function agendaSemRender(){
       <td style="padding:5px 10px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap">${hr.slice(0,5)}</td>`;
     diasOrd.forEach(dia=>{
       const slot = grade.find(g=>g.dia_semana===dia&&g.horario===hr);
-      if(!slot){html+=`<td style="padding:4px 6px"></td>`;return;}
       const data = dataPorDia[dia];
+      if(!slot){
+        html+=`<td style="padding:4px 6px" data-dia="${dia}" data-hora="${hr}" data-data="${data}"
+          ondragover="event.preventDefault()" ondrop="agSemDrop(event)">
+          <div style="border:1.5px dashed var(--border2);border-radius:6px;height:42px;min-width:90px"></div>
+        </td>`;
+        return;
+      }
       // Exceção da semana ou sessão registrada?
       const excecao = agendaSessoes.find(s=>s.grade_id===slot.id&&s.data===data&&s.status==='cancelado');
       const sessao  = agendaSessoes.find(s=>s.grade_id===slot.id&&s.data===data);
@@ -3854,10 +3871,10 @@ function agendaSemRender(){
       const corBg = sessao ? cor.bg : agLocalCor(slot.nome_aluno).bg;
       const corBorder = sessao ? cor.border : agLocalCor(slot.nome_aluno).border;
       const corTxt = sessao ? cor.txt : agLocalCor(slot.nome_aluno).txt;
-      html+=`<td style="padding:4px 6px">
+      html+=`<td style="padding:4px 6px" data-dia="${dia}" data-hora="${hr}" data-data="${data}"
+        ondragover="event.preventDefault()" ondrop="agSemDrop(event)">
         <div draggable="true" data-slot="${slot.id}" data-data="${data}" data-nome="${slot.nome_aluno}"
           ondragstart="agSemDragStart(event,'${slot.id}','${data}','${slot.nome_aluno}')"
-          ondragover="event.preventDefault()"
           onclick="agendaModalSessao('${slot.id}','${data}','${hr}','${sessao?sessao.nome_aluno:slot.nome_aluno}','${sessao?.id||''}')"
           style="background:${corBg};border:1px solid ${corBorder};border-radius:6px;padding:4px 7px;cursor:pointer;font-size:11px;min-width:90px">
           <div style="font-weight:600;color:${corTxt}">${nome.split(' ')[0]}</div>
@@ -3871,12 +3888,6 @@ function agendaSemRender(){
   html+=`</tbody></table>`;
   document.getElementById('ag-sem-grade').innerHTML = html;
 
-  // Adicionar event listeners para drop nas células
-  document.querySelectorAll('#ag-sem-grade td').forEach(td=>{
-    td.addEventListener('dragover', e=>e.preventDefault());
-    td.addEventListener('drop', agSemDrop);
-  });
-
   // Lista de sessões
   const datasemana = Object.values(dataPorDia);
   const sessoes = agendaSessoes.filter(s=>datasemana.includes(s.data))
@@ -3887,15 +3898,18 @@ function agendaSemRender(){
   } else {
     sessoes.forEach(s=>{
       const cor=STATUS_COR[s.status]||STATUS_COR.agendado;
-      lista+=`<div onclick="agendaModalSessao(null,'${s.data}','${s.horario}','${s.nome_aluno}','${s.id}')"
-        style="display:flex;gap:10px;padding:10px 12px;background:${cor.bg};border:1px solid ${cor.border};border-radius:8px;margin-bottom:6px;cursor:pointer;align-items:flex-start">
+      const podDesfazer = s.status==='cancelado' || s.status==='reagendado';
+      lista+=`<div style="display:flex;gap:10px;padding:10px 12px;background:${cor.bg};border:1px solid ${cor.border};border-radius:8px;margin-bottom:6px;align-items:flex-start">
         <div style="min-width:38px;font-weight:700;color:${cor.txt};font-size:12px">${s.horario.slice(0,5)}</div>
-        <div style="flex:1">
+        <div style="flex:1;cursor:pointer" onclick="agendaModalSessao(null,'${s.data}','${s.horario}','${s.nome_aluno}','${s.id}')">
           <div style="font-weight:600;font-size:13px">${s.nome_aluno} <span style="font-size:11px;color:${cor.txt}">${cor.label}</span></div>
           ${s.anotacoes?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${s.anotacoes.slice(0,100)}${s.anotacoes.length>100?'…':''}</div>`:''}
           ${s.encaminhamentos?`<div style="font-size:11px;color:var(--accent);margin-top:2px">→ ${s.encaminhamentos.slice(0,80)}</div>`:''}
         </div>
-        ${s.duracao_min?`<div style="font-size:11px;color:var(--muted)">${s.duracao_min}min</div>`:''}
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          ${s.duracao_min?`<div style="font-size:11px;color:var(--muted)">${s.duracao_min}min</div>`:''}
+          ${podDesfazer?`<button onclick="agendaDesfazerCancelamento('${s.id}')" style="font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:4px;background:var(--surface);cursor:pointer;color:var(--text);white-space:nowrap">↩ Desfazer</button>`:''}
+        </div>
       </div>`;
     });
   }
@@ -3909,26 +3923,50 @@ function agSemDragStart(e, slotId, data, nome){
   agSemDragSlot = {slotId, data, nome};
   e.dataTransfer.effectAllowed = 'move';
 }
-async function agSemDrop(e){
-  e.preventDefault();
-  if(!agSemDragSlot) return;
-  // Encontrar slot de destino
-  const tdDest = e.currentTarget;
-  const divDest = tdDest.querySelector('[data-slot]');
-  if(!divDest||divDest.dataset.slot===agSemDragSlot.slotId){ agSemDragSlot=null; return; }
-  const slotDestId = divDest.dataset.slot;
-  const dataDest   = divDest.dataset.data;
-  const nomeDest   = divDest.dataset.nome;
-  const slotDest   = agendaGrade.find(g=>g.id===slotDestId);
-  if(!slotDest){ agSemDragSlot=null; return; }
 
-  // Criar exceção: cancelar slot original nessa data
-  const cancelOrig = {grade_id:agSemDragSlot.slotId, aluno_id:null, nome_aluno:agSemDragSlot.nome,
-    data:agSemDragSlot.data, horario: agendaGrade.find(g=>g.id===agSemDragSlot.slotId)?.horario||'',
-    status:'cancelado', pauta:'Reagendado nesta semana', anotacoes:'', encaminhamentos:'', atualizado_em:new Date().toISOString()};
-  // Criar sessão no slot destino com o aluno original
-  const novaSessao = {grade_id:slotDestId, nome_aluno:agSemDragSlot.nome,
-    data:dataDest, horario:slotDest.horario, status:'agendado', pauta:'', anotacoes:'', encaminhamentos:'', atualizado_em:new Date().toISOString()};
+async function agSemDrop(e){
+  e.preventDefault(); e.stopPropagation();
+  if(!agSemDragSlot) return;
+  // Encontrar td mais próxima com data-data
+  const td = e.target.closest('td[data-data]');
+  if(!td){ agSemDragSlot=null; return; }
+  const dataDest = td.dataset.data;
+  const horaDest = td.dataset.hora;
+  const divDest  = td.querySelector('[data-slot]');
+  const slotDestId = divDest?.dataset?.slot||null;
+
+  const slotOrig = agendaGrade.find(g=>g.id===agSemDragSlot.slotId);
+  if(!slotOrig){ agSemDragSlot=null; return; }
+
+  // Não fazer nada se drop no mesmo slot
+  if(slotDestId===agSemDragSlot.slotId){ agSemDragSlot=null; return; }
+
+  const cancelOrig = {
+    grade_id:agSemDragSlot.slotId, nome_aluno:agSemDragSlot.nome,
+    data:agSemDragSlot.data, horario:slotOrig.horario,
+    status:'cancelado', pauta:'Reagendado nesta semana',
+    anotacoes:'', encaminhamentos:'', atualizado_em:new Date().toISOString()
+  };
+
+  let novaSessao;
+  if(slotDestId){
+    // Drop em slot com aluno — move para o horário desse slot
+    const slotDest = agendaGrade.find(g=>g.id===slotDestId);
+    novaSessao = {
+      grade_id:slotDestId, nome_aluno:agSemDragSlot.nome,
+      data:dataDest, horario:slotDest.horario,
+      status:'agendado', pauta:'', anotacoes:'', encaminhamentos:'',
+      atualizado_em:new Date().toISOString()
+    };
+  } else {
+    // Drop em célula vazia — usa o horário da linha
+    novaSessao = {
+      grade_id:null, nome_aluno:agSemDragSlot.nome,
+      data:dataDest, horario:horaDest,
+      status:'agendado', pauta:'', anotacoes:'', encaminhamentos:'',
+      atualizado_em:new Date().toISOString()
+    };
+  }
 
   if(supaMode){
     const [r1,r2] = await Promise.all([
@@ -3939,6 +3977,15 @@ async function agSemDrop(e){
     if(r2.data) agendaSessoes.push(r2.data);
   }
   agSemDragSlot = null;
+  agendaSemRender();
+}
+
+async function agendaDesfazerCancelamento(sessaoId){
+  if(!confirm('Desfazer este cancelamento?')) return;
+  if(supaMode){
+    await supa.from('agenda_sessoes').delete().eq('id', sessaoId);
+  }
+  agendaSessoes = agendaSessoes.filter(s=>s.id!==sessaoId);
   agendaSemRender();
 }
 
