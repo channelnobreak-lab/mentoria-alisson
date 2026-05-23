@@ -1632,7 +1632,7 @@ function cronoGerarCronograma(){
     const freq=((ENEM_RECORRENCIA[modulo]||2)-1)/2;
     const area=MAT_AREA_CRONO[materia]||'CN';
     const score=(erroScore*0.35+prereq*0.45+freq*0.20)*(1+pesArea[area]*0.4);
-    const sessaoAnterior=cronograma.find(c=>c.conteudo===conteudo&&c.materia===materia&&c.concluido);
+    const sessaoAnterior=cronograma.find(c=>(c.tipo==='historico'||c.concluido)&&c.conteudo===conteudo&&c.materia===materia&&c.tipo!=='simulado'&&c.tipo!=='redacao'&&c.concluido);
     const dataConc=sessaoAnterior?.concluidoEm||null;
     const erroAposEstudo=sessaoAnterior&&erros.some(e=>{
       if(e.materia!==materia||e.conteudo!==conteudo)return false;
@@ -1697,7 +1697,7 @@ function cronoGerarCronograma(){
 
   novosCronograma.sort((a,b)=>a.sessaoData.localeCompare(b.sessaoData));
 
-  // Preservar status de conclusão
+  // Preservar status e estatísticas de conclusão — inclusive conteúdos que saíram da fila
   novosCronograma.forEach(item=>{
     const prev=cronograma.find(c=>c.conteudo===item.conteudo&&c.materia===item.materia&&item.tipo!=='simulado');
     if(prev&&prev.concluido){
@@ -1707,7 +1707,13 @@ function cronoGerarCronograma(){
     }
   });
 
-  cronograma=novosCronograma;
+  // Manter registro dos conteúdos dominados (concluídos e removidos da fila) para histórico
+  const historico = cronograma.filter(c =>
+    c.concluido && c.tipo !== 'simulado' && c.tipo !== 'redacao' &&
+    !novosCronograma.some(n => n.conteudo === c.conteudo && n.materia === c.materia)
+  ).map(c => ({...c, tipo:'historico'}));
+
+  cronograma = [...novosCronograma, ...historico];
   document.getElementById('crono-resultado').style.display='block';
   renderCronoDias();
   salvarCrono();
@@ -1850,13 +1856,17 @@ async function cronoBaixarPDF(){
 function renderCronoDias(){
   const container=document.getElementById('crono-dias-container');
   if(!cronograma.length){container.innerHTML='<p style="color:var(--muted);font-size:13px">Clique em "Gerar cronograma" para distribuir os conteúdos.</p>';return;}
-  const total=cronograma.filter(x=>x.tipo!=='simulado'&&x.tipo!=='redacao').length;
-  const concluidos=cronograma.filter(x=>x.concluido&&x.tipo!=='simulado'&&x.tipo!=='redacao').length;
-  document.getElementById('crono-titulo').textContent=`Cronograma da quinzena — ${concluidos}/${total} conteúdos concluídos`;
+  // Histórico = concluídos removidos da fila (não exibir, mas contar)
+  const ativos=cronograma.filter(x=>x.tipo!=='historico');
+  const total=ativos.filter(x=>x.tipo!=='simulado'&&x.tipo!=='redacao').length;
+  const concluidosAtivos=ativos.filter(x=>x.concluido&&x.tipo!=='simulado'&&x.tipo!=='redacao').length;
+  const concluidosHistorico=cronograma.filter(x=>x.tipo==='historico'&&x.concluido).length;
+  const concluidos=concluidosAtivos+concluidosHistorico;
+  document.getElementById('crono-titulo').textContent=`Cronograma da quinzena — ${concluidos}/${total+concluidosHistorico} conteúdos concluídos`;
 
-  // Agrupar por data
+  // Agrupar por data (apenas itens ativos)
   const porDia={};
-  cronograma.forEach((item,idx)=>{
+  ativos.forEach((item,idx)=>{
     if(!porDia[item.sessaoData])porDia[item.sessaoData]=[];
     porDia[item.sessaoData].push({...item,idx});
   });
