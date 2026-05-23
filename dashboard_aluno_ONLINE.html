@@ -1604,7 +1604,8 @@ function cronoGerarCronograma(){
         const dataConc = c.concluidoEm || null;
         const temErroNovo = erros.some(e => {
           if(e.materia !== c.materia || e.conteudo !== c.conteudo) return false;
-          if(!dataConc || !e.criadoEm) return true; // sem data → conservador, considera novo
+          if(!e.criadoEm) return true;   // erro sem data → conservador, considera novo
+          if(!dataConc) return false;     // sessão sem data mas erro tem data → confia no erro (é antigo)
           return new Date(e.criadoEm) > new Date(dataConc);
         });
         return !temErroNovo;
@@ -1635,7 +1636,8 @@ function cronoGerarCronograma(){
     const dataConc=sessaoAnterior?.concluidoEm||null;
     const erroAposEstudo=sessaoAnterior&&erros.some(e=>{
       if(e.materia!==materia||e.conteudo!==conteudo)return false;
-      if(!dataConc||!e.criadoEm)return true;
+      if(!e.criadoEm)return true;   // erro sem data → conservador
+      if(!dataConc)return false;     // sessão sem data mas erro tem data → é antigo
       return new Date(e.criadoEm)>new Date(dataConc);
     });
     const eRevisao = sessaoAnterior
