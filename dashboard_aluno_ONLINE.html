@@ -860,8 +860,20 @@ tr:hover td{background:var(--bg);}
 </div>
 
 <!-- MODAL CONCLUSÃO -->
-<div class="modal-overlay" id="modal-crono-split">
-  <div class="modal" style="max-width:480px">
+<!-- Cronômetro flutuante -->
+<div id="cronometro-widget" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface);border:1.5px solid var(--border);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.2);padding:16px 20px;min-width:220px;user-select:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <div id="cron-titulo" style="font-size:11px;font-weight:600;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    <button onclick="cronometroFechar()" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--muted);line-height:1;padding:0">✕</button>
+  </div>
+  <div id="cron-display" style="font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);text-align:center;letter-spacing:2px;margin:6px 0">00:00:00</div>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+    <button id="cron-btn-play" onclick="cronometroToggle()" style="padding:7px 20px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer">▶ Iniciar</button>
+    <button onclick="cronometroReset()" style="padding:7px 14px;border-radius:8px;border:1.5px solid var(--border2);background:var(--surface);font-size:13px;cursor:pointer;color:var(--muted)">↺</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-crono-split">  <div class="modal" style="max-width:480px">
     <div class="modal-title">✂ Dividir conteúdo em sessões</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px" id="split-desc"></p>
     <p style="font-size:13px;margin-bottom:10px">Em quantas sessões você quer dividir este conteúdo?</p>
@@ -1492,7 +1504,7 @@ function cronoAbrirTurnos(i){
   const dowLong = d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'});
   document.getElementById('modal-turnos-titulo').textContent = dowLong.charAt(0).toUpperCase()+dowLong.slice(1);
   document.getElementById('modal-turnos-sub').textContent = 'Configure cada turno individualmente';
-  const tipos = [{v:'estudo',l:'📚 Estudo'},{v:'folga',l:'❌ Folga'},{v:'simulado',l:'📝 Simulado'},{v:'redacao',l:'✍️ Redação'}];
+  const tipos = [{v:'estudo',l:'📚 Estudo'},{v:'folga',l:'❌ Folga'},{v:'simulado',l:'📝 Simulado'},{v:'redacao',l:'✍️ Redação'},{v:'aula',l:'🏫 Aula'}];
   const icons = ['🌅 Manhã','☀️ Tarde','🌙 Noite'];
   document.getElementById('modal-turnos-lista').innerHTML = dia.turnos.map((t,ti)=>`
     <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
@@ -1519,7 +1531,7 @@ function cronoSetTurnoTipo(ti, tipo){
   const t = quinzenaDias[_turnosDiaIdx].turnos[ti];
   t.tipo = tipo;
   // Visual
-  ['estudo','folga','simulado','redacao'].forEach(tp=>{
+  ['estudo','folga','simulado','redacao','aula'].forEach(tp=>{
     const btn = document.getElementById(`turno-tipo-${ti}-${tp}`);
     if(!btn) return;
     const ativo = tp===tipo;
@@ -1527,8 +1539,7 @@ function cronoSetTurnoTipo(ti, tipo){
     btn.style.borderColor = ativo?'var(--accent)':'var(--border2)';
     btn.style.color = ativo?'white':'var(--text)';
   });
-  document.getElementById(`turno-qtd-row-${ti}`).style.display = tipo==='estudo'?'flex':'none';
-}
+  document.getElementById(`turno-qtd-row-${ti}`).style.display = tipo==='estudo'?'flex':'none';}
 
 function cronoSetTurnoQtd(ti, qtd){
   if(_turnosDiaIdx<0) return;
@@ -1906,6 +1917,7 @@ function renderCronoDias(){
     const turnosCols = diaObj.turnos ? diaObj.turnos.map((t,ti)=>{
       const itsTurno = porTurno[ti]||[];
       if(t.tipo==='folga' && !itsTurno.length) return `<div style="padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><span>${turnoIcons[ti]}</span><span>Folga</span></div>`;
+      if(t.tipo==='aula' && !itsTurno.length) return `<div style="padding:8px 12px;background:#EEF2FF;border-radius:8px;margin-bottom:6px;font-size:12px;color:#1A3F6B;display:flex;align-items:center;gap:8px;border:1px solid #C7D2FE"><span>${turnoIcons[ti]}</span><span>🏫 Aula — bloqueado</span></div>`;
       if(!itsTurno.length) return '';
       return `<div style="margin-bottom:8px">
         <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:4px 0;border-bottom:1px solid var(--border)">${turnoIcons[ti]}</div>
@@ -2185,6 +2197,8 @@ function renderCronoCard(item){
   acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoPuxarProximo(${item.idx})">⏩ Próximo</button>`;
   if(!item.concluido&&item.tipo!=='simulado'&&item.tipo!=='redacao')
     acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoAbrirSplit(${item.idx})" title="Dividir em mais sessões">✂ Dividir</button>`;
+  if(item.tipo!=='simulado'&&item.tipo!=='redacao')
+    acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronometroAbrir('${(item.conteudo||'').replace(/'/g,'\\\'')}')" title="Iniciar cronômetro">⏱ Cronômetro</button>`;
 
   return `<div class="${cardClass}" id="crono-card-${item.idx}"
     draggable="true"
@@ -2346,6 +2360,60 @@ function cronoConfirmarSplit(){
   closeModal('modal-crono-split');
   salvarCrono();
   renderCronoDias();
+}
+
+// ── Cronômetro flutuante ──────────────────────────────────────
+let _cronTimer = null;
+let _cronSegundos = 0;
+let _cronRodando = false;
+
+function cronometroAbrir(titulo){
+  document.getElementById('cron-titulo').textContent = titulo || 'Sessão de estudo';
+  document.getElementById('cronometro-widget').style.display = 'block';
+  // Não reseta se já estava rodando
+}
+
+function cronometroFechar(){
+  document.getElementById('cronometro-widget').style.display = 'none';
+  // Pausa mas mantém o tempo
+  if(_cronRodando) cronometroToggle();
+}
+
+function cronometroToggle(){
+  if(_cronRodando){
+    clearInterval(_cronTimer);
+    _cronRodando = false;
+    document.getElementById('cron-btn-play').textContent = '▶ Continuar';
+    document.getElementById('cron-btn-play').style.background = 'var(--accent)';
+  } else {
+    _cronTimer = setInterval(()=>{
+      _cronSegundos++;
+      cronometroAtualizar();
+    }, 1000);
+    _cronRodando = true;
+    document.getElementById('cron-btn-play').textContent = '⏸ Pausar';
+    document.getElementById('cron-btn-play').style.background = '#B8860B';
+  }
+}
+
+function cronometroReset(){
+  clearInterval(_cronTimer);
+  _cronRodando = false;
+  _cronSegundos = 0;
+  cronometroAtualizar();
+  document.getElementById('cron-btn-play').textContent = '▶ Iniciar';
+  document.getElementById('cron-btn-play').style.background = 'var(--accent)';
+}
+
+function cronometroAtualizar(){
+  const h = Math.floor(_cronSegundos/3600);
+  const m = Math.floor((_cronSegundos%3600)/60);
+  const s = _cronSegundos%60;
+  document.getElementById('cron-display').textContent =
+    String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  // Cor muda conforme tempo: verde até 1h, amarelo até 2h, vermelho depois
+  const cor = _cronSegundos < 3600 ? 'var(--teal)' : _cronSegundos < 7200 ? '#B8860B' : '#8B1A1A';
+  document.getElementById('cron-display').style.color = cor;
 }
 function cronoAbrirConclusao(idx){
   cronoModalIdx=idx;
