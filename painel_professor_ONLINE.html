@@ -3630,10 +3630,7 @@ let agendaSemData = null; // Date da segunda-feira exibida
 let agDragSrc     = null; // para drag & drop
 
 function agLocalCor(nomeAluno){
-  // Busca exata primeiro, depois parcial (primeiro nome)
-  const primeiroNome = nomeAluno.split(' ')[0].toLowerCase();
-  const a = alunos.find(x=>x.nome===nomeAluno)
-         || alunos.find(x=>x.nome?.toLowerCase().startsWith(primeiroNome));
+  const a = alunos.find(x=>x.nome===nomeAluno);
   return LOCAL_COR[a?.local||''] || LOCAL_COR[''];
 }
 
