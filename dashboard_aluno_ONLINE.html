@@ -860,6 +860,24 @@ tr:hover td{background:var(--bg);}
 </div>
 
 <!-- MODAL CONCLUSÃO -->
+<div class="modal-overlay" id="modal-crono-split">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">✂ Dividir conteúdo em sessões</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px" id="split-desc"></p>
+    <p style="font-size:13px;margin-bottom:10px">Em quantas sessões você quer dividir este conteúdo?</p>
+    <div style="display:flex;gap:10px;margin-bottom:18px">
+      <button class="btn btn-secondary split-n-btn active" data-n="2" onclick="splitSetN(this)">2 sessões</button>
+      <button class="btn btn-secondary split-n-btn" data-n="3" onclick="splitSetN(this)">3 sessões</button>
+      <button class="btn btn-secondary split-n-btn" data-n="4" onclick="splitSetN(this)">4 sessões</button>
+    </div>
+    <div id="split-slots-wrap" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-crono-split')">Cancelar</button>
+      <button class="btn btn-primary" onclick="cronoConfirmarSplit()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-conclusao">
   <div class="modal" style="max-width:420px">
     <div class="modal-title">✅ Conteúdo concluído!</div>
@@ -2165,9 +2183,16 @@ function renderCronoCard(item){
   if(item.concluido&&isRevisao&&!item.revConcluido) acoesHtml+=`<button class="crono-btn crono-btn-revisao" onclick="cronoAbrirRevisao(${item.idx})">🔄 Revisão feita</button>`;
   if(item.concluido&&isRevisao&&item.revConcluido) acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px;color:var(--muted)" onclick="cronoDesfazerRevisao(${item.idx})">↩ Desfazer revisão</button>`;
   acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoPuxarProximo(${item.idx})">⏩ Próximo</button>`;
+  if(!item.concluido&&item.tipo!=='simulado'&&item.tipo!=='redacao')
+    acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoAbrirSplit(${item.idx})" title="Dividir em mais sessões">✂ Dividir</button>`;
 
-  return `<div class="${cardClass}" id="crono-card-${item.idx}">
-    <div class="crono-card-icon">${icon}</div>
+  return `<div class="${cardClass}" id="crono-card-${item.idx}"
+    draggable="true"
+    ondragstart="cronoDragStart(event,${item.idx})"
+    ondragover="event.preventDefault();this.style.outline='2px dashed var(--accent)'"
+    ondragleave="this.style.outline=''"
+    ondrop="cronoDrop(event,${item.idx});this.style.outline=''">
+    <div class="crono-card-icon" style="cursor:grab">⠿ ${icon}</div>
     <div class="crono-card-body">
       <div class="crono-card-title">${item.conteudo}${isRevisao?' <span style="font-size:10px;background:var(--gold-light);color:var(--gold);padding:1px 6px;border-radius:10px">Revisão</span>':''}</div>
       <div class="crono-card-sub">${item.materia} — ${item.modulo}</div>
@@ -2201,6 +2226,126 @@ function cronoDesfazerRevisao(idx){
   cronograma[idx].revExAcertos = 0;
   renderCronoDias();
   salvarCrono();
+}
+
+// ── Drag & Drop de sessões do cronograma ─────────────────────
+let _cronoDragIdx = null;
+function cronoDragStart(e, idx){
+  _cronoDragIdx = idx;
+  e.dataTransfer.effectAllowed = 'move';
+}
+function cronoDrop(e, destIdx){
+  e.preventDefault();
+  if(_cronoDragIdx === null || _cronoDragIdx === destIdx){ _cronoDragIdx=null; return; }
+  const src = cronograma[_cronoDragIdx];
+  const dst = cronograma[destIdx];
+  // Trocar sessaoData e turnoIdx entre os dois
+  const tmpData = src.sessaoData; const tmpTurno = src.turnoIdx;
+  src.sessaoData = dst.sessaoData; src.turnoIdx = dst.turnoIdx;
+  dst.sessaoData = tmpData;       dst.turnoIdx = tmpTurno;
+  _cronoDragIdx = null;
+  salvarCrono();
+  renderCronoDias();
+}
+
+// ── Dividir conteúdo em múltiplas sessões ────────────────────
+let _splitIdx = null;
+let _splitN = 2;
+
+function cronoAbrirSplit(idx){
+  _splitIdx = idx;
+  _splitN = 2;
+  const item = cronograma[idx];
+  document.getElementById('split-desc').textContent = `"${item.conteudo}" — ${item.materia}`;
+  // Reset botões
+  document.querySelectorAll('.split-n-btn').forEach(b=>{
+    b.classList.toggle('active', +b.dataset.n===2);
+    b.style.background = +b.dataset.n===2 ? 'var(--accent)' : '';
+    b.style.color = +b.dataset.n===2 ? '#fff' : '';
+  });
+  renderSplitSlots();
+  document.getElementById('modal-crono-split').classList.add('open');
+}
+
+function splitSetN(btn){
+  _splitN = +btn.dataset.n;
+  document.querySelectorAll('.split-n-btn').forEach(b=>{
+    b.classList.toggle('active', b===btn);
+    b.style.background = b===btn ? 'var(--accent)' : '';
+    b.style.color = b===btn ? '#fff' : '';
+  });
+  renderSplitSlots();
+}
+
+function renderSplitSlots(){
+  const item = cronograma[_splitIdx];
+  // Pegar dias disponíveis (datas da quinzena)
+  const datasDisponiveis = [...new Set(cronograma
+    .filter(x=>x.tipo!=='historico')
+    .map(x=>x.sessaoData)
+  )].sort();
+
+  let html = '';
+  for(let i=0;i<_splitN;i++){
+    const label = i===0 ? 'Sessão original' : `Sessão ${i+1}`;
+    const dataAtual = i===0 ? item.sessaoData : (datasDisponiveis[datasDisponiveis.indexOf(item.sessaoData)+i] || '');
+    html += `<div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:12px;font-weight:600;color:var(--muted);min-width:100px">${label}</span>
+      <select class="form-input split-data-sel" id="split-data-${i}" style="flex:1;font-size:12px;padding:6px">
+        <option value="">— Escolher dia —</option>
+        ${datasDisponiveis.map(d=>{
+          const dd = new Date(d+'T12:00:00');
+          const fmt = dd.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
+          return `<option value="${d}" ${d===dataAtual?'selected':''}>${fmt}</option>`;
+        }).join('')}
+      </select>
+      <select class="form-input" id="split-turno-${i}" style="width:90px;font-size:12px;padding:6px">
+        <option value="0">Manhã</option>
+        <option value="1">Tarde</option>
+        <option value="2">Noite</option>
+      </select>
+    </div>`;
+  }
+  document.getElementById('split-slots-wrap').innerHTML = html;
+  // Preencher turno inicial
+  const selTurno0 = document.getElementById('split-turno-0');
+  if(selTurno0) selTurno0.value = item.turnoIdx ?? 0;
+}
+
+function cronoConfirmarSplit(){
+  if(_splitIdx === null) return;
+  const item = cronograma[_splitIdx];
+
+  // Ler slots escolhidos
+  const slots = [];
+  for(let i=0;i<_splitN;i++){
+    const data = document.getElementById(`split-data-${i}`)?.value;
+    const turno = +document.getElementById(`split-turno-${i}`)?.value || 0;
+    if(!data){ alert(`Escolha um dia para a sessão ${i+1}`); return; }
+    slots.push({data, turno});
+  }
+
+  // Atualizar sessão original com slot 0
+  cronograma[_splitIdx].sessaoData = slots[0].data;
+  cronograma[_splitIdx].turnoIdx   = slots[0].turno;
+
+  // Criar novas sessões para slots 1..N-1
+  for(let i=1;i<slots.length;i++){
+    const nova = {
+      ...item,
+      sessaoData: slots[i].data,
+      turnoIdx:   slots[i].turno,
+      concluido:  false, exQtd:0, exAcertos:0,
+      revConcluido:false, revExQtd:0, revExAcertos:0,
+      concluidoEm: null,
+      _splitDe: _splitIdx
+    };
+    cronograma.push(nova);
+  }
+
+  closeModal('modal-crono-split');
+  salvarCrono();
+  renderCronoDias();
 }
 function cronoAbrirConclusao(idx){
   cronoModalIdx=idx;
@@ -3661,8 +3806,9 @@ function renderOutrasProvasList(){
   tbody.innerHTML='';
   outrasProvas.forEach((p,i)=>{
     const pcts=matsPresentes.map(m=>p.mats[m.key]?.pct??'—');
-    const vals=matsPresentes.map(m=>p.mats[m.key]?.pct).filter(v=>v!==undefined);
-    const media=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length)+'%':'—';
+    const totalA=matsPresentes.reduce((s,m)=>s+(p.mats[m.key]?.a||0),0);
+    const totalQ=matsPresentes.reduce((s,m)=>s+(p.mats[m.key]?.q||0),0);
+    const media=totalQ>0?Math.round(totalA/totalQ*100)+'%':'—';
     const cor=v=>v==='—'?'color:var(--muted)':v>=70?'color:#1A6B5C':v>=50?'color:#B8860B':'color:#8B1A1A';
     tbody.innerHTML+=`<tr>
       <td style="color:var(--muted)">${i+1}</td>
