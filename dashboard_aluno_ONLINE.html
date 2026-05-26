@@ -154,7 +154,14 @@ async function carregarDadosAluno(user){
     carregarOutrasProvas(); // fallback localStorage
   }
 
-  carregarCalendario();
+  // Carregar calendário do banco (prioritário sobre localStorage)
+  if(alunoData.calendario_provas?.length){
+    calendarioProvas = alunoData.calendario_provas.map(p=>({
+      tipo:p.tipo||'', nome:p.nome||'', data:p.data||'', id:p.id||Date.now()
+    }));
+  } else {
+    carregarCalendario(); // fallback localStorage
+  }
 
   // Atualizar header com nome e objetivo
   const headerNome = document.getElementById('header-nome');
@@ -1895,9 +1902,11 @@ function renderCronoDias(){
 
   // Agrupar por data (apenas itens ativos)
   const porDia={};
-  ativos.forEach((item,idx)=>{
+  ativos.forEach((item)=>{
+    // idx real no array cronograma, não no array ativos
+    const idxReal = cronograma.indexOf(item);
     if(!porDia[item.sessaoData])porDia[item.sessaoData]=[];
-    porDia[item.sessaoData].push({...item,idx});
+    porDia[item.sessaoData].push({...item,idx:idxReal});
   });
   quinzenaDias.forEach(dia=>{ if(!porDia[dia.data]) porDia[dia.data]=[]; });
 
@@ -4165,6 +4174,12 @@ function renderCalendarioLista(){
 
 function salvarCalendario(){
   try{_setItem('cal_'+config.nome, JSON.stringify(calendarioProvas));}catch(e){}
+  if(supaMode && supaAlunoId){
+    supa.from('alunos')
+      .update({calendario_provas: calendarioProvas})
+      .eq('id', supaAlunoId)
+      .then(({error})=>{ if(error) console.error('Erro ao salvar calendário:', error); });
+  }
 }
 function carregarCalendario(){
   try{const s=_getItem('cal_'+config.nome);if(s)calendarioProvas=JSON.parse(s);}catch(e){}
