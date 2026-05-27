@@ -90,7 +90,6 @@ async function supaCarregarAlunos(){
     objetivo: a.objetivo||'',
     obs: a.obs||'',
     local: a.local||'',
-    areas_bloqueadas: a.areas_bloqueadas||[],
     metas: a.metas||{cn:39,ch:40,lin:36,mat:41},
     enemHistorico: a.enemy_historico||[],
     calendarioProvas: a.calendario_provas||[],
@@ -424,6 +423,7 @@ tr:hover td{background:var(--bg);}
         <button class="painel-nav-btn" onclick="showOverviewTab('alunos-cadastrados',this)">Alunos cadastrados</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('acessos',this)">🔐 Acessos</button>
         <button class="painel-nav-btn" onclick="showOverviewTab('agenda',this)">📅 Agenda</button>
+        <button class="painel-nav-btn" onclick="showOverviewTab('metricas-mentoria',this)">📊 Métricas</button>
       </div>
 
       <!-- GERAL -->
@@ -640,6 +640,44 @@ tr:hover td{background:var(--bg);}
     </div><!-- fim ov-agenda -->
     </div><!-- fim overview-panel -->
 
+    <!-- ══════════════════════════ MÉTRICAS DE MENTORIA ══════════════════════════ -->
+    <div id="ov-metricas-mentoria" class="painel-section" style="display:none">
+
+      <!-- IM Geral -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px" id="mm-cards-top"></div>
+
+      <!-- Linha 1: Evolução média + Scatter -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title">Evolução média da turma por área</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="mm-chart-evolucao"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Quadrante — Adesão vs. Evolução</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Cada ponto é um aluno. Passe o mouse para ver o nome.</div>
+          <div class="chart-wrap" style="height:220px"><canvas id="mm-chart-scatter"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Linha 2: Conversão de erros + Adesão cronograma -->
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-title">Taxa de conversão de erros — top alunos</div>
+          <div id="mm-conversao-lista"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Adesão ao cronograma — top alunos</div>
+          <div id="mm-adesao-lista"></div>
+        </div>
+      </div>
+
+      <!-- Linha 3: Ranking IM -->
+      <div class="card">
+        <div class="card-title">Ranking — Índice de Mentoria por aluno</div>
+        <div id="mm-ranking-im"></div>
+      </div>
+    </div>
+
     <!-- MODAL SLOT DA GRADE -->
     <div class="modal-overlay" id="modal-ag-slot">
       <div class="modal" style="max-width:400px">
@@ -759,6 +797,16 @@ tr:hover td{background:var(--bg);}
             <div class="card-title">📆 Calendário de provas</div>
             <div id="aluno-calendario-display" style="font-size:12px;color:var(--muted)">Nenhuma prova cadastrada pelo aluno.</div>
           </div>
+        </div>
+
+        <!-- MÉTRICAS DE MENTORIA INDIVIDUAL -->
+        <div class="card" style="margin-top:16px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="card-title" style="margin-bottom:0">📊 Métricas de acompanhamento</div>
+            <div id="aluno-im-badge" style="margin-left:auto;font-size:24px;font-weight:800;font-family:var(--font-display)"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px" id="aluno-mm-cards"></div>
+          <div class="chart-wrap" style="height:180px"><canvas id="chart-aluno-mm-evol"></canvas></div>
         </div>
       </div>
 
@@ -2036,7 +2084,6 @@ function showAlunoTab(id, btn){
 function renderAlunoDashboard(){
   if(!alunoAtual) return;
   const a=alunoAtual;
-  const sims=a.simulados||[];
   const cn=sims.length?avg(sims.map(cnA)):0, ch=sims.length?avg(sims.map(chA)):0,
         lin=sims.length?avg(sims.map(linA)):0, mat=sims.length?avg(sims.map(matA)):0;
   const ult=ultimoEnem(a);
@@ -2095,6 +2142,7 @@ function renderAlunoDashboard(){
   renderAlunoProjecao(a);
   renderAlunoObs(a);
   renderAlunoCalendario(a);
+  if(typeof renderMetricasAluno==='function') renderMetricasAluno(a);
 }
 
 function renderAlunoDiagnostico(a, cn, ch, lin, mat){
@@ -4069,6 +4117,384 @@ showOverviewTab = function(id,btn){
     agendaShowTab('config');
   }
 };
+
+// ══════════════════════════════════════════════════════════════
+// MÉTRICAS DE MENTORIA
+// ══════════════════════════════════════════════════════════════
+
+// ── Helpers de cálculo ───────────────────────────────────────
+function mmPct(a,q){ return q>0?Math.round(a/q*100):null; }
+function mmAvg(arr){ const v=arr.filter(x=>x!==null&&!isNaN(x)); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
+
+function mmAreaAvgs(sims, fn, qfn){
+  return sims.map(s=>{ const q=qfn(s); return q>0?Math.round(fn(s)/q*100):null; });
+}
+
+function mmCnA(s){ return (s.bio?.a||0)+(s.qui?.a||0)+(s.fis?.a||0); }
+function mmCnQ(s){ return (s.bio?.q||0)+(s.qui?.q||0)+(s.fis?.q||0); }
+function mmChA(s){ return (s.his?.a||0)+(s.geo?.a||0)+(s.fil?.a||0)+(s.soc?.a||0); }
+function mmChQ(s){ return (s.his?.q||0)+(s.geo?.q||0)+(s.fil?.q||0)+(s.soc?.q||0); }
+function mmLinA(s){ return s.lin?.a||0; } function mmLinQ(s){ return s.lin?.q||0; }
+function mmMatA(s){ return s.mat?.a||0; } function mmMatQ(s){ return s.mat?.q||0; }
+
+// Índice de Evolução — compara primeiros 2 vs últimos 2 simulados
+function mmCalcIE(sims){
+  if(sims.length < 2) return null;
+  const fns = [
+    {a:mmCnA,  q:mmCnQ},
+    {a:mmChA,  q:mmChQ},
+    {a:mmLinA, q:mmLinQ},
+    {a:mmMatA, q:mmMatQ},
+  ];
+  const n = Math.min(2, sims.length);
+  const inicio = sims.slice(0, n);
+  const fim    = sims.slice(-n);
+  let deltas = [];
+  fns.forEach(({a,q})=>{
+    const pi = mmAvg(inicio.map(s=>mmPct(a(s),q(s))));
+    const pf = mmAvg(fim.map(s=>mmPct(a(s),q(s))));
+    if(pi!==null && pf!==null) deltas.push(pf-pi);
+  });
+  if(!deltas.length) return null;
+  const delta = mmAvg(deltas); // média dos deltas por área
+  // Normaliza: +20pp = 100, 0 = 50, -20pp = 0
+  return Math.max(0, Math.min(100, Math.round(50 + delta*2.5)));
+}
+
+// IE por área — retorna {cn, ch, lin, mat} com valores iniciais e finais
+function mmCalcIEAreas(sims){
+  if(sims.length < 1) return null;
+  const n = Math.min(2, sims.length);
+  const inicio = sims.slice(0,n);
+  const fim    = sims.slice(-n);
+  const areas = [
+    {k:'CN',  a:mmCnA,  q:mmCnQ},
+    {k:'CH',  a:mmChA,  q:mmChQ},
+    {k:'LCT', a:mmLinA, q:mmLinQ},
+    {k:'MAT', a:mmMatA, q:mmMatQ},
+  ];
+  const result = {};
+  areas.forEach(({k,a,q})=>{
+    const pi = mmAvg(inicio.map(s=>mmPct(a(s),q(s))));
+    const pf = mmAvg(fim.map(s=>mmPct(a(s),q(s))));
+    result[k] = {ini:pi, fim:pf, delta:pi!==null&&pf!==null?Math.round(pf-pi):null};
+  });
+  return result;
+}
+
+// Taxa de Conversão de Erros (0-100)
+// Proporção de matérias com erro que tiveram redução entre primeiros e últimos simulados
+function mmCalcTCE(aluno){
+  const erros = aluno.erros||[];
+  if(!erros.length) return null;
+  const sims = aluno.simulados||[];
+  if(sims.length < 2) return null;
+  // Simplificado: quantidade de erros únicos por conteúdo (menos = melhor)
+  // Comparamos proporção de erros registrados vs. total de questões respondidas
+  const totalQ = sims.reduce((s,sim)=>{
+    return s+(mmCnQ(sim)||0)+(mmChQ(sim)||0)+(mmLinQ(sim)||0)+(mmMatQ(sim)||0);
+  },0);
+  if(!totalQ) return null;
+  // Quanto menor a taxa de erros em relação às questões, melhor a conversão
+  const taxaErro = erros.length / totalQ;
+  return Math.max(0, Math.min(100, Math.round((1-taxaErro)*100)));
+}
+
+// Adesão ao cronograma — lida do objeto aluno (não temos crono no professor, usamos proxy)
+// Proxy: se o aluno tem erros recentes (últimos 30 dias) = está ativo = boa adesão
+function mmCalcAdesao(aluno){
+  // Sem dados de crono no painel do professor, usamos simulados recentes como proxy
+  const sims = aluno.simulados||[];
+  if(!sims.length) return null;
+  // Cadência: quantos simulados tem vs. semanas desde o primeiro
+  // Ideal: 1 simulado a cada 2 semanas
+  // Score baseado na regularidade
+  if(sims.length >= 8) return 100;
+  if(sims.length >= 5) return 80;
+  if(sims.length >= 3) return 60;
+  if(sims.length >= 2) return 40;
+  return 20;
+}
+
+// Índice de Mentoria composto (pesos: IE 50%, TCE 30%, Adesão 20%)
+function mmCalcIM(ie, tce, adesao){
+  const vals = [];
+  const pesos = [];
+  if(ie!==null){vals.push(ie);pesos.push(0.5);}
+  if(tce!==null){vals.push(tce);pesos.push(0.3);}
+  if(adesao!==null){vals.push(adesao);pesos.push(0.2);}
+  if(!vals.length) return null;
+  const pesoTotal = pesos.reduce((a,b)=>a+b,0);
+  return Math.round(vals.reduce((s,v,i)=>s+v*pesos[i],0)/pesoTotal);
+}
+
+function mmCorIM(v){
+  if(v===null) return 'var(--muted)';
+  if(v>=75) return '#1A6B5C';
+  if(v>=50) return '#B8860B';
+  return '#8B1A1A';
+}
+
+function mmLabelIM(v){
+  if(v===null) return '—';
+  if(v>=80) return 'Excelente';
+  if(v>=65) return 'Bom';
+  if(v>=50) return 'Regular';
+  return 'Atenção';
+}
+
+// ── Renderização turma ────────────────────────────────────────
+function renderMetricasMentoria(){
+  const com = alunos.filter(a=>(a.simulados||[]).length>=1);
+  if(!com.length){
+    document.getElementById('mm-cards-top').innerHTML='<p style="color:var(--muted);font-size:13px">Nenhum aluno com simulados cadastrados.</p>';
+    return;
+  }
+
+  // Calcular métricas de todos
+  const dados = com.map(a=>{
+    const sims = a.simulados||[];
+    const ie     = mmCalcIE(sims);
+    const tce    = mmCalcTCE(a);
+    const adesao = mmCalcAdesao(a);
+    const im     = mmCalcIM(ie,tce,adesao);
+    return {a, ie, tce, adesao, im};
+  });
+
+  const ims     = dados.map(d=>d.im).filter(v=>v!==null);
+  const ies     = dados.map(d=>d.ie).filter(v=>v!==null);
+  const tces    = dados.map(d=>d.tce).filter(v=>v!==null);
+  const adesoes = dados.map(d=>d.adesao).filter(v=>v!==null);
+
+  const imMedio  = ims.length    ? Math.round(mmAvg(ims))     : null;
+  const ieMedio  = ies.length    ? Math.round(mmAvg(ies))     : null;
+  const tceMedio = tces.length   ? Math.round(mmAvg(tces))    : null;
+  const adMedio  = adesoes.length? Math.round(mmAvg(adesoes)) : null;
+
+  // Cards do topo
+  const cards = [
+    {l:'Índice de Mentoria', v:imMedio!==null?imMedio+'':'—', sub:mmLabelIM(imMedio), cor:mmCorIM(imMedio)},
+    {l:'Índice de Evolução', v:ieMedio!==null?ieMedio+'':'—', sub:'Crescimento médio', cor:mmCorIM(ieMedio)},
+    {l:'Conversão de Erros', v:tceMedio!==null?tceMedio+'%':'—', sub:'Eficácia do ciclo', cor:mmCorIM(tceMedio)},
+    {l:'Adesão ao Processo', v:adMedio!==null?adMedio+'%':'—', sub:'Regularidade simulados', cor:mmCorIM(adMedio)},
+    {l:'Alunos avaliados', v:com.length+'', sub:`de ${alunos.length} total`, cor:'var(--accent)'},
+  ];
+  document.getElementById('mm-cards-top').innerHTML = cards.map(c=>`
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:28px;font-weight:800;color:${c.cor};font-family:var(--font-display)">${c.v}</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin:4px 0">${c.l}</div>
+      <div style="font-size:11px;color:var(--muted)">${c.sub}</div>
+    </div>`).join('');
+
+  // Gráfico de evolução por área
+  const areas = ['CN','CH','LCT','MAT'];
+  const coresArea = {'CN':'#1A6B5C','CH':'#7D3C00','LCT':'#1A3F6B','MAT':'#8B1A1A'};
+  const evolPorArea = {};
+  areas.forEach(ar=>{
+    const deltas = dados.map(d=>{
+      const ie = mmCalcIEAreas(d.a.simulados||[]);
+      return ie?.[ar]?.delta??null;
+    }).filter(v=>v!==null);
+    evolPorArea[ar] = deltas.length ? Math.round(mmAvg(deltas)) : 0;
+  });
+
+  destroyChart('mmEvolucao');
+  const ctx1 = document.getElementById('mm-chart-evolucao');
+  if(ctx1){
+    charts['mmEvolucao'] = new Chart(ctx1,{
+      type:'bar',
+      data:{
+        labels:areas,
+        datasets:[{
+          label:'Delta médio (pp)',
+          data:areas.map(a=>evolPorArea[a]),
+          backgroundColor:areas.map(a=>evolPorArea[a]>=0?coresArea[a]+'CC':'#8B1A1ACC'),
+          borderRadius:6
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          y:{grid:{color:'var(--border2)'},ticks:{color:'var(--muted)',callback:v=>v+'pp'}},
+          x:{grid:{display:false},ticks:{color:'var(--muted)'}}
+        }
+      }
+    });
+  }
+
+  // Scatter plot
+  destroyChart('mmScatter');
+  const ctx2 = document.getElementById('mm-chart-scatter');
+  if(ctx2){
+    const pontos = dados.filter(d=>d.ie!==null&&d.adesao!==null).map(d=>({
+      x: d.adesao,
+      y: d.ie,
+      nome: d.a.nome.split(' ')[0],
+      im: d.im
+    }));
+    charts['mmScatter'] = new Chart(ctx2,{
+      type:'scatter',
+      data:{datasets:[{
+        data: pontos,
+        backgroundColor: pontos.map(p=>mmCorIM(p.im)+'CC'),
+        pointRadius: 7,
+        pointHoverRadius: 9
+      }]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:ctx=>{
+            const p=ctx.raw;
+            return ` ${p.nome} — Adesão:${p.x} IE:${p.y}`;
+          }}}
+        },
+        scales:{
+          x:{title:{display:true,text:'Adesão ao processo',color:'var(--muted)'},min:0,max:100,
+            grid:{color:'var(--border2)'},ticks:{color:'var(--muted)'}},
+          y:{title:{display:true,text:'Índice de Evolução',color:'var(--muted)'},min:0,max:100,
+            grid:{color:'var(--border2)'},ticks:{color:'var(--muted)'}}
+        }
+      }
+    });
+  }
+
+  // Lista de conversão de erros
+  const top10TCE = [...dados].filter(d=>d.tce!==null)
+    .sort((a,b)=>b.tce-a.tce).slice(0,10);
+  document.getElementById('mm-conversao-lista').innerHTML = top10TCE.length
+    ? top10TCE.map(d=>`<div class="ebar-row" style="margin-bottom:6px">
+        <span class="ebar-name">${d.a.nome.split(' ').slice(0,2).join(' ')}</span>
+        <div class="ebar-track"><div class="ebar-fill" style="width:${d.tce}%;background:${mmCorIM(d.tce)}"></div></div>
+        <span class="ebar-val" style="color:${mmCorIM(d.tce)}">${d.tce}%</span>
+      </div>`).join('')
+    : '<p style="font-size:12px;color:var(--muted)">Sem dados suficientes.</p>';
+
+  // Lista de adesão
+  const top10Ad = [...dados].filter(d=>d.adesao!==null)
+    .sort((a,b)=>b.adesao-a.adesao).slice(0,10);
+  document.getElementById('mm-adesao-lista').innerHTML = top10Ad.length
+    ? top10Ad.map(d=>`<div class="ebar-row" style="margin-bottom:6px">
+        <span class="ebar-name">${d.a.nome.split(' ').slice(0,2).join(' ')}</span>
+        <div class="ebar-track"><div class="ebar-fill" style="width:${d.adesao}%;background:${mmCorIM(d.adesao)}"></div></div>
+        <span class="ebar-val" style="color:${mmCorIM(d.adesao)}">${d.adesao}%</span>
+      </div>`).join('')
+    : '<p style="font-size:12px;color:var(--muted)">Sem dados suficientes.</p>';
+
+  // Ranking IM
+  const ranking = [...dados].filter(d=>d.im!==null).sort((a,b)=>b.im-a.im);
+  document.getElementById('mm-ranking-im').innerHTML = ranking.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid var(--border2)">
+          <th style="padding:6px;text-align:left;color:var(--muted);font-weight:600">#</th>
+          <th style="padding:6px;text-align:left;color:var(--muted);font-weight:600">Aluno</th>
+          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">IM</th>
+          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">IE</th>
+          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">Erros</th>
+          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">Adesão</th>
+          <th style="padding:6px;text-align:left;color:var(--muted);font-weight:600">Status</th>
+        </tr></thead><tbody>
+        ${ranking.map((d,i)=>`<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="selecionarAluno('${d.a.id}')">
+          <td style="padding:6px;color:var(--muted)">${i+1}</td>
+          <td style="padding:6px;font-weight:500">${d.a.nome.split(' ').slice(0,2).join(' ')}</td>
+          <td style="padding:6px;text-align:center;font-weight:700;color:${mmCorIM(d.im)}">${d.im}</td>
+          <td style="padding:6px;text-align:center;color:${mmCorIM(d.ie)}">${d.ie??'—'}</td>
+          <td style="padding:6px;text-align:center;color:${mmCorIM(d.tce)}">${d.tce!==null?d.tce+'%':'—'}</td>
+          <td style="padding:6px;text-align:center;color:${mmCorIM(d.adesao)}">${d.adesao!==null?d.adesao+'%':'—'}</td>
+          <td style="padding:6px;color:${mmCorIM(d.im)}">${mmLabelIM(d.im)}</td>
+        </tr>`).join('')}
+      </tbody></table>`
+    : '<p style="font-size:12px;color:var(--muted)">Sem dados suficientes.</p>';
+}
+
+// ── Renderização individual ───────────────────────────────────
+function renderMetricasAluno(a){
+  const sims    = a.simulados||[];
+  const ie      = mmCalcIE(sims);
+  const tce     = mmCalcTCE(a);
+  const adesao  = mmCalcAdesao(a);
+  const im      = mmCalcIM(ie,tce,adesao);
+  const ieAreas = mmCalcIEAreas(sims);
+
+  // Badge IM
+  const badge = document.getElementById('aluno-im-badge');
+  if(badge){
+    badge.textContent = im!==null ? `IM ${im}` : '—';
+    badge.style.color = mmCorIM(im);
+    badge.title = mmLabelIM(im);
+  }
+
+  // Cards individuais
+  const cards = [
+    {l:'Índice de Mentoria', v:im!==null?im+'':'—', cor:mmCorIM(im), sub:mmLabelIM(im)},
+    {l:'Índice de Evolução', v:ie!==null?ie+'':'—', cor:mmCorIM(ie), sub:'Crescimento geral'},
+    {l:'Conversão de Erros', v:tce!==null?tce+'%':'—', cor:mmCorIM(tce), sub:'Eficácia do ciclo'},
+    {l:'Adesão ao processo', v:adesao!==null?adesao+'%':'—', cor:mmCorIM(adesao), sub:'Regularidade'},
+  ];
+  const cardsEl = document.getElementById('aluno-mm-cards');
+  if(cardsEl) cardsEl.innerHTML = cards.map(c=>`
+    <div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:${c.cor};font-family:var(--font-display)">${c.v}</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${c.l}</div>
+      <div style="font-size:10px;color:var(--muted)">${c.sub}</div>
+    </div>`).join('');
+
+  // Gráfico de evolução por área
+  if(!ieAreas||!sims.length){ return; }
+  const areas  = ['CN','CH','LCT','MAT'];
+  const cores  = ['#1A6B5C','#7D3C00','#1A3F6B','#8B1A1A'];
+  const labels = sims.map((_,i)=>`Sim ${i+1}`);
+  const fns    = [
+    {a:mmCnA, q:mmCnQ},{a:mmChA, q:mmChQ},
+    {a:mmLinA,q:mmLinQ},{a:mmMatA,q:mmMatQ}
+  ];
+
+  destroyChart('alunoMMEvol');
+  const ctx = document.getElementById('chart-aluno-mm-evol');
+  if(ctx){
+    charts['alunoMMEvol'] = new Chart(ctx,{
+      type:'line',
+      data:{
+        labels,
+        datasets: areas.map((ar,i)=>({
+          label:ar,
+          data: sims.map(s=>mmPct(fns[i].a(s),fns[i].q(s))),
+          borderColor: cores[i],
+          backgroundColor: cores[i]+'22',
+          tension:0.3,
+          pointRadius:3,
+          borderWidth:2,
+          spanGaps:true
+        }))
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
+        scales:{
+          y:{min:0,max:100,grid:{color:'var(--border2)'},ticks:{color:'var(--muted)',callback:v=>v+'%'}},
+          x:{grid:{display:false},ticks:{color:'var(--muted)',maxTicksLimit:8}}
+        }
+      }
+    });
+  }
+}
+
+// ── Hook na navegação ─────────────────────────────────────────
+const _showOverviewMetricas = showOverviewTab;
+showOverviewTab = function(id,btn){
+  _showOverviewMetricas(id,btn);
+  if(id==='metricas-mentoria') renderMetricasMentoria();
+};
+
+const _showAlunoTabOrig = showAlunoTab;
+showAlunoTab = function(id,btn){
+  _showAlunoTabOrig(id,btn);
+  if(id==='dashboard' && alunoAtual) renderMetricasAluno(alunoAtual);
+};
+
+// Chamar também quando seleciona aluno
+const _selecionarAlunoOrig = typeof selecionarAluno==='function' ? selecionarAluno : null;
 
 // ── SOBRESCREVER salvarAluno para sincronizar ─────────────────
 const _salvarAlunoOriginal = salvarAluno;
