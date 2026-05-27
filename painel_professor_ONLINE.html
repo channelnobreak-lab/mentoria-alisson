@@ -2084,6 +2084,7 @@ function showAlunoTab(id, btn){
 function renderAlunoDashboard(){
   if(!alunoAtual) return;
   const a=alunoAtual;
+  const sims=a.simulados||[];
   const cn=sims.length?avg(sims.map(cnA)):0, ch=sims.length?avg(sims.map(chA)):0,
         lin=sims.length?avg(sims.map(linA)):0, mat=sims.length?avg(sims.map(matA)):0;
   const ult=ultimoEnem(a);
@@ -4108,14 +4109,15 @@ function agendaPopularDatalist(){
 }
 
 // Inicializar quando a aba for aberta
-const _showOverviewTabOrig2 = typeof _showOverviewTabOrig!=='undefined' ? _showOverviewTabOrig : showOverviewTab;
+const _showOverviewTabBase = showOverviewTab;
 showOverviewTab = function(id,btn){
-  _showOverviewTabOrig2(id,btn);
+  _showOverviewTabBase(id,btn);
   if(id==='agenda'){
     if(!agendaSemData) agendaSemData=agSegunda(null);
     agendaCfgSetQ(1);
     agendaShowTab('config');
   }
+  if(id==='metricas-mentoria') renderMetricasMentoria();
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -4480,21 +4482,7 @@ function renderMetricasAluno(a){
   }
 }
 
-// ── Hook na navegação ─────────────────────────────────────────
-const _showOverviewMetricas = showOverviewTab;
-showOverviewTab = function(id,btn){
-  _showOverviewMetricas(id,btn);
-  if(id==='metricas-mentoria') renderMetricasMentoria();
-};
-
-const _showAlunoTabOrig = showAlunoTab;
-showAlunoTab = function(id,btn){
-  _showAlunoTabOrig(id,btn);
-  if(id==='dashboard' && alunoAtual) renderMetricasAluno(alunoAtual);
-};
-
-// Chamar também quando seleciona aluno
-const _selecionarAlunoOrig = typeof selecionarAluno==='function' ? selecionarAluno : null;
+// ── Hook na navegação — consolidado no override acima (agenda + métricas) ──
 
 // ── SOBRESCREVER salvarAluno para sincronizar ─────────────────
 const _salvarAlunoOriginal = salvarAluno;
