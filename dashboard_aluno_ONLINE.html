@@ -4179,7 +4179,12 @@ function salvarCalendario(){
     supa.from('alunos')
       .update({calendario_provas: calendarioProvas})
       .eq('id', supaAlunoId)
-      .then(({error})=>{ if(error) console.error('Erro ao salvar calendário:', error); });
+      .then(({data, error})=>{
+        if(error){
+          console.error('Erro ao salvar calendário no banco:', error);
+          setStatus('⚠ Erro ao salvar calendário: '+error.message);
+        }
+      });
   }
 }
 function carregarCalendario(){
