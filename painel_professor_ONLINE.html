@@ -4141,46 +4141,45 @@ function mmFatorDificuldade(patamarInicial){
   return 1.0 + (patamarInicial/100) * 2.25;
 }
 
-// IE ponderado por dificuldade — IM = IE
-// Para cada área: delta × fator(patamar inicial) → média → normaliza 0-100
+// IE ponderado por dificuldade — usa primeiro terço vs. último terço
+// Mínimo 3 simulados. Calcula delta por área só quando ambos os extremos têm dados.
 function mmCalcIE(sims){
-  if(sims.length < 2) return null;
+  if(sims.length < 3) return null;
   const fns = [
     {a:mmCnA,  q:mmCnQ},
     {a:mmChA,  q:mmChQ},
     {a:mmLinA, q:mmLinQ},
     {a:mmMatA, q:mmMatQ},
   ];
-  const n = Math.min(2, sims.length);
-  const inicio = sims.slice(0, n);
-  const fim    = sims.slice(-n);
+  const t = Math.max(1, Math.floor(sims.length/3));
+  const inicio = sims.slice(0, t);
+  const fim    = sims.slice(-t);
 
   let deltasPonderados = [];
   fns.forEach(({a,q})=>{
-    const pi = mmAvg(inicio.map(s=>mmPct(a(s),q(s))));
-    const pf = mmAvg(fim.map(s=>mmPct(a(s),q(s))));
+    // Só usa áreas com dados nos dois extremos
+    const valsIni = inicio.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    const valsFim = fim.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    if(!valsIni.length || !valsFim.length) return;
+    const pi = mmAvg(valsIni);
+    const pf = mmAvg(valsFim);
     if(pi===null || pf===null) return;
-    const delta  = pf - pi;
-    const fator  = mmFatorDificuldade(pi);
+    const delta = pf - pi;
+    const fator = mmFatorDificuldade(pi);
     deltasPonderados.push(delta * fator);
   });
 
   if(!deltasPonderados.length) return null;
   const deltaMedio = mmAvg(deltasPonderados);
-
-  // Normaliza para 0-100
-  // +20pp × fator 1.0 (patamar 0%) = +20 → ~100
-  // +10pp × fator 2.5 (patamar 75%) = +25 → >100 (cap em 100)
-  // 0 = 50 | -20pp × fator 1.0 = -20 → 0
   return Math.max(0, Math.min(100, Math.round(50 + deltaMedio * 2.5)));
 }
 
 // IE por área — para visualização individual
 function mmCalcIEAreas(sims){
-  if(sims.length < 1) return null;
-  const n = Math.min(2, sims.length);
-  const inicio = sims.slice(0,n);
-  const fim    = sims.slice(-n);
+  if(sims.length < 3) return null;
+  const t = Math.max(1, Math.floor(sims.length/3));
+  const inicio = sims.slice(0, t);
+  const fim    = sims.slice(-t);
   const areas = [
     {k:'CN',  a:mmCnA,  q:mmCnQ},
     {k:'CH',  a:mmChA,  q:mmChQ},
@@ -4189,12 +4188,17 @@ function mmCalcIEAreas(sims){
   ];
   const result = {};
   areas.forEach(({k,a,q})=>{
-    const pi = mmAvg(inicio.map(s=>mmPct(a(s),q(s))));
-    const pf = mmAvg(fim.map(s=>mmPct(a(s),q(s))));
-    const delta = pi!==null&&pf!==null ? Math.round(pf-pi) : null;
-    const fator = mmFatorDificuldade(pi);
-    const deltaPond = delta!==null ? Math.round(delta*fator*10)/10 : null;
-    result[k] = {ini:pi, fim:pf, delta, fator:Math.round(fator*10)/10, deltaPond};
+    const valsIni = inicio.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    const valsFim = fim.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    if(!valsIni.length || !valsFim.length){
+      result[k] = null; return;
+    }
+    const pi = Math.round(mmAvg(valsIni));
+    const pf = Math.round(mmAvg(valsFim));
+    const delta = pf - pi;
+    const fator = Math.round(mmFatorDificuldade(pi)*10)/10;
+    const deltaPond = Math.round(delta * fator * 10)/10;
+    result[k] = {ini:pi, fim:pf, delta, fator, deltaPond};
   });
   return result;
 }
@@ -4219,9 +4223,9 @@ function mmLabelIM(v){
 
 // ── Renderização turma ────────────────────────────────────────
 function renderMetricasMentoria(){
-  const com = alunos.filter(a=>(a.simulados||[]).length>=2);
+  const com = alunos.filter(a=>(a.simulados||[]).length>=3);
   if(!com.length){
-    document.getElementById('mm-cards-top').innerHTML='<p style="color:var(--muted);font-size:13px">Nenhum aluno com 2+ simulados cadastrados. O índice requer pelo menos um simulado inicial e um final.</p>';
+    document.getElementById('mm-cards-top').innerHTML='<p style="color:var(--muted);font-size:13px">Nenhum aluno com 3+ simulados cadastrados. O índice requer pelo menos 3 para calcular terços.</p>';
     ['mm-chart-evolucao','mm-chart-scatter','mm-conversao-lista','mm-adesao-lista','mm-ranking-im'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.innerHTML='';
     });
@@ -4240,7 +4244,7 @@ function renderMetricasMentoria(){
   const imMedio = ims.length ? Math.round(mmAvg(ims)) : null;
 
   // Cards do topo
-  const semDados = alunos.filter(a=>(a.simulados||[]).length<2).length;
+  const semDados = alunos.filter(a=>(a.simulados||[]).length<3).length;
   const cards = [
     {l:'Índice de Mentoria (IM)', v:imMedio!==null?imMedio+'':'—', sub:mmLabelIM(imMedio), cor:mmCorIM(imMedio), desc:'Média ponderada pela dificuldade de partida'},
     {l:'Alunos avaliados', v:com.length+'', sub:`${semDados} sem dados suficientes`, cor:'var(--accent)', desc:'2+ simulados'},
@@ -4350,6 +4354,7 @@ function renderMetricasMentoria(){
         <thead><tr style="border-bottom:1px solid var(--border2)">
           <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">#</th>
           <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">Aluno</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Sims</th>
           <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">IM</th>
           <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Patamar inicial</th>
           <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Patamar final</th>
@@ -4358,20 +4363,27 @@ function renderMetricasMentoria(){
         </tr></thead><tbody>
         ${ranking.map((d,i)=>{
           const sims=d.a.simulados||[];
-          const n=Math.min(2,sims.length);
+          const t=Math.max(1,Math.floor(sims.length/3));
           const fns=[{a:mmCnA,q:mmCnQ},{a:mmChA,q:mmChQ},{a:mmLinA,q:mmLinQ},{a:mmMatA,q:mmMatQ}];
-          const pat=v=>mmAvg(fns.map(({a,q})=>mmAvg(v.map(s=>mmPct(a(s),q(s))))).filter(x=>x!==null));
-          const pi=Math.round(pat(sims.slice(0,n))||0);
-          const pf=Math.round(pat(sims.slice(-n))||0);
-          const delta=pf-pi;
+          const patMedia=v=>{
+            const vals=fns.map(({a,q})=>{
+              const vs=v.map(s=>mmPct(a(s),q(s))).filter(x=>x!==null);
+              return vs.length?mmAvg(vs):null;
+            }).filter(x=>x!==null);
+            return vals.length?Math.round(mmAvg(vals)):null;
+          };
+          const pi=patMedia(sims.slice(0,t));
+          const pf=patMedia(sims.slice(-t));
+          const delta=pi!==null&&pf!==null?pf-pi:null;
           const dCor=delta>0?'#1A6B5C':delta<0?'#8B1A1A':'var(--muted)';
           return `<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="selecionarAluno('${d.a.id}')">
             <td style="padding:6px 8px;color:var(--muted)">${i+1}</td>
             <td style="padding:6px 8px;font-weight:500">${d.a.nome.split(' ').slice(0,2).join(' ')}</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${sims.length}</td>
             <td style="padding:6px 8px;text-align:center;font-weight:700;color:${mmCorIM(d.im)}">${d.im}</td>
-            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pi}%</td>
-            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pf}%</td>
-            <td style="padding:6px 8px;text-align:center;font-weight:600;color:${dCor}">${delta>0?'+':''}${delta}pp</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pi!==null?pi+'%':'—'}</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pf!==null?pf+'%':'—'}</td>
+            <td style="padding:6px 8px;text-align:center;font-weight:600;color:${dCor}">${delta!==null?(delta>0?'+':'')+delta+'pp':'—'}</td>
             <td style="padding:6px 8px;color:${mmCorIM(d.im)}">${mmLabelIM(d.im)}</td>
           </tr>`;
         }).join('')}
@@ -4414,8 +4426,8 @@ function renderMetricasAluno(a){
       </div>`;
     }).join('');
   } else if(cardsEl){
-    cardsEl.innerHTML = sims.length<2
-      ? '<p style="font-size:12px;color:var(--muted);grid-column:1/-1">Necessário pelo menos 2 simulados para calcular o índice.</p>'
+    cardsEl.innerHTML = sims.length<3
+      ? '<p style="font-size:12px;color:var(--muted);grid-column:1/-1">Necessário pelo menos 3 simulados para calcular o índice (usa primeiro e último terço).</p>'
       : '';
   }
 }
