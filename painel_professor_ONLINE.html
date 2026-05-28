@@ -658,16 +658,28 @@ tr:hover td{background:var(--bg);}
         </div>
       </div>
 
-      <!-- Linha 2: Conversão de erros + Adesão cronograma -->
+      <!-- Linha 2: Distribuição IM + Evolução temporal -->
       <div class="grid-2" style="margin-bottom:16px">
         <div class="card">
-          <div class="card-title">Taxa de conversão de erros — top alunos</div>
-          <div id="mm-conversao-lista"></div>
+          <div class="card-title">Distribuição do IM — faixas da turma</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="mm-chart-dist"></canvas></div>
+          <div id="mm-dist-faixas" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
         </div>
         <div class="card">
-          <div class="card-title">Adesão ao cronograma — top alunos</div>
-          <div id="mm-adesao-lista"></div>
+          <div class="card-title">Evolução do IM médio ao longo do ano</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Turma dividida em blocos de simulados — mostra se o método está ganhando ou perdendo força</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="mm-chart-evolucao-tempo"></canvas></div>
         </div>
+      </div>
+
+      <!-- Linha 3: Alunos em regressão -->
+      <div class="card" style="margin-bottom:16px;border:1px solid #8B1A1A33">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <div class="card-title" style="margin-bottom:0;color:#8B1A1A">⚠ Alunos em regressão</div>
+          <span id="mm-regressao-count" style="font-size:11px;color:var(--muted)"></span>
+          <button class="btn btn-primary" onclick="mmExportarAnalise()" style="margin-left:auto;font-size:12px;padding:6px 14px;background:#1A3F6B;border-color:#1A3F6B">📋 Exportar para análise com IA</button>
+        </div>
+        <div id="mm-regressao-lista"></div>
       </div>
 
       <!-- Linha 3: Ranking IM -->
@@ -4341,11 +4353,182 @@ function renderMetricasMentoria(){
     });
   }
 
-  // Limpar listas de TCE e adesão (não usadas mais)
+  // Limpar listas antigas (não usadas mais)
   const listaConv = document.getElementById('mm-conversao-lista');
   const listaAd   = document.getElementById('mm-adesao-lista');
   if(listaConv) listaConv.closest('.card')?.style.setProperty('display','none');
   if(listaAd)   listaAd.closest('.card')?.style.setProperty('display','none');
+
+  // ── Distribuição do IM ──────────────────────────────────────
+  const faixas = [
+    {l:'Excelente', min:80, max:100, cor:'#1A6B5C'},
+    {l:'Bom',       min:65, max:79,  cor:'#2E86AB'},
+    {l:'Regular',   min:50, max:64,  cor:'#B8860B'},
+    {l:'Atenção',   min:0,  max:49,  cor:'#8B1A1A'},
+  ];
+  const contFaixas = faixas.map(f=>ims.filter(v=>v>=f.min&&v<=f.max).length);
+
+  destroyChart('mmDist');
+  const ctxDist = document.getElementById('mm-chart-dist');
+  if(ctxDist){
+    charts['mmDist'] = new Chart(ctxDist,{
+      type:'bar',
+      data:{
+        labels: faixas.map(f=>f.l),
+        datasets:[{
+          data: contFaixas,
+          backgroundColor: faixas.map(f=>f.cor+'CC'),
+          borderRadius: 6,
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false},
+          tooltip:{callbacks:{label:ctx=>{
+            const pct=ims.length?Math.round(ctx.parsed.y/ims.length*100):0;
+            return ` ${ctx.parsed.y} aluno${ctx.parsed.y!==1?'s':''} (${pct}%)`;
+          }}}
+        },
+        scales:{
+          y:{grid:{color:'var(--border2)'},ticks:{color:'var(--muted)'},beginAtZero:true},
+          x:{grid:{display:false},ticks:{color:'var(--muted)'}}
+        }
+      }
+    });
+  }
+  // Badges de faixa
+  const distEl = document.getElementById('mm-dist-faixas');
+  if(distEl) distEl.innerHTML = faixas.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;background:${f.cor}18;border:1px solid ${f.cor}44;border-radius:8px;padding:4px 10px">
+      <span style="font-size:16px;font-weight:700;color:${f.cor}">${contFaixas[i]}</span>
+      <span style="font-size:11px;color:var(--text)">${f.l}</span>
+      <span style="font-size:10px;color:var(--muted)">${ims.length?Math.round(contFaixas[i]/ims.length*100):0}%</span>
+    </div>`).join('');
+
+  // ── Evolução do IM médio ao longo do tempo ──────────────────
+  // Divide cada aluno em 3 blocos e calcula IM de cada bloco
+  // Depois tira a média da turma por bloco
+  const blocoLabels = ['Início\n(1º terço)','Meio\n(2º terço)','Final\n(3º terço)'];
+  const imsBloco = [[], [], []];
+
+  dados.forEach(d=>{
+    const sims = d.a.simulados||[];
+    if(sims.length < 3) return;
+    const t = Math.floor(sims.length/3);
+    const blocos = [sims.slice(0,t), sims.slice(t,2*t), sims.slice(-t)];
+    // IM de cada bloco = evolução entre bloco anterior e atual
+    // Bloco 0 = baseline (sem IM)
+    // Bloco 1 = evolução entre bloco 0 e bloco 1
+    // Bloco 2 = evolução entre bloco 0 e bloco 2 (comparado ao início)
+    const fns=[{a:mmCnA,q:mmCnQ},{a:mmChA,q:mmChQ},{a:mmLinA,q:mmLinQ},{a:mmMatA,q:mmMatQ}];
+    const mediaBlocoArea=(bloco,fn)=>{
+      const vals=bloco.map(s=>mmPct(fn.a(s),fn.q(s))).filter(v=>v!==null);
+      return vals.length?mmAvg(vals):null;
+    };
+    [1,2].forEach((bi)=>{
+      let dpArr=[];
+      fns.forEach(fn=>{
+        const pi=mediaBlocoArea(blocos[0],fn);
+        const pf=mediaBlocoArea(blocos[bi],fn);
+        if(pi===null||pf===null) return;
+        dpArr.push((pf-pi)*mmFatorDificuldade(pi));
+      });
+      if(dpArr.length){
+        const ie=Math.max(0,Math.min(100,Math.round(50+mmAvg(dpArr)*2.5)));
+        imsBloco[bi].push(ie);
+      }
+    });
+    imsBloco[0].push(50); // baseline = 50 (neutro)
+  });
+
+  const mediaBlocos = imsBloco.map(arr=>arr.length?Math.round(mmAvg(arr)):null);
+
+  destroyChart('mmEvolTempo');
+  const ctxTempo = document.getElementById('mm-chart-evolucao-tempo');
+  if(ctxTempo){
+    charts['mmEvolTempo'] = new Chart(ctxTempo,{
+      type:'line',
+      data:{
+        labels:['Início','Meio','Final'],
+        datasets:[{
+          label:'IM médio da turma',
+          data: mediaBlocos,
+          borderColor:'var(--accent)',
+          backgroundColor:'var(--accent)22',
+          tension:0.3,
+          pointRadius:6,
+          pointBackgroundColor: mediaBlocos.map(v=>mmCorIM(v)),
+          borderWidth:2,
+          fill:true,
+          spanGaps:true
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false},
+          tooltip:{callbacks:{label:ctx=>` IM médio: ${ctx.parsed.y??'—'} — ${mmLabelIM(ctx.parsed.y)}`}}
+        },
+        scales:{
+          y:{min:0,max:100,grid:{color:'var(--border2)'},ticks:{color:'var(--muted)'},
+            annotations:{line50:{type:'line',yMin:50,yMax:50,borderColor:'var(--border2)',borderDash:[4,4]}}
+          },
+          x:{grid:{display:false},ticks:{color:'var(--muted)'}}
+        }
+      }
+    });
+  }
+
+  // ── Alunos em regressão ─────────────────────────────────────
+  const regressao = dados.filter(d=>{
+    if(!d.ieA) return false;
+    // Considera em regressão se delta bruto médio das áreas disponíveis for negativo
+    const deltas = Object.values(d.ieA).filter(v=>v!==null).map(v=>v.delta);
+    if(!deltas.length) return false;
+    return mmAvg(deltas) < 0;
+  }).sort((a,b)=>{
+    const da=mmAvg(Object.values(a.ieA).filter(v=>v!==null).map(v=>v.delta));
+    const db=mmAvg(Object.values(b.ieA).filter(v=>v!==null).map(v=>v.delta));
+    return da-db; // pior primeiro
+  });
+
+  const countEl = document.getElementById('mm-regressao-count');
+  if(countEl) countEl.textContent = regressao.length
+    ? `${regressao.length} aluno${regressao.length>1?'s':''} com delta bruto negativo`
+    : '';
+
+  const listaReg = document.getElementById('mm-regressao-lista');
+  if(listaReg){
+    if(!regressao.length){
+      listaReg.innerHTML='<p style="font-size:12px;color:var(--muted)">Nenhum aluno com regressão detectada. 🎉</p>';
+    } else {
+      listaReg.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid #8B1A1A33">
+          <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">Aluno</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Sims</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">CN</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">CH</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">LCT</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">MAT</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">IM</th>
+        </tr></thead><tbody>
+        ${regressao.map(d=>{
+          const sims=d.a.simulados||[];
+          const fmt=k=>{
+            const v=d.ieA[k];
+            if(!v) return '<td style="padding:6px 8px;text-align:center;color:var(--muted)">—</td>';
+            const cor=v.delta>0?'#1A6B5C':v.delta<0?'#8B1A1A':'var(--muted)';
+            return `<td style="padding:6px 8px;text-align:center;font-weight:600;color:${cor}">${v.delta>0?'+':''}${v.delta}pp</td>`;
+          };
+          return `<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="selecionarAluno('${d.a.id}')">
+            <td style="padding:6px 8px;font-weight:500">${d.a.nome.split(' ').slice(0,2).join(' ')}</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${sims.length}</td>
+            ${fmt('CN')}${fmt('CH')}${fmt('LCT')}${fmt('MAT')}
+            <td style="padding:6px 8px;text-align:center;font-weight:700;color:${mmCorIM(d.im)}">${d.im??'—'}</td>
+          </tr>`;
+        }).join('')}
+        </tbody></table>`;
+    }
+  }
 
   // Ranking IM
   const ranking = [...dados].filter(d=>d.im!==null).sort((a,b)=>b.im-a.im);
@@ -4430,6 +4613,109 @@ function renderMetricasAluno(a){
       ? '<p style="font-size:12px;color:var(--muted);grid-column:1/-1">Necessário pelo menos 3 simulados para calcular o índice (usa primeiro e último terço).</p>'
       : '';
   }
+}
+
+// ── Exportar análise para IA ──────────────────────────────────
+function mmExportarAnalise(){
+  const com = alunos.filter(a=>(a.simulados||[]).length>=3);
+  if(!com.length){ alert('Nenhum aluno com dados suficientes.'); return; }
+
+  const fns=[{k:'CN',a:mmCnA,q:mmCnQ},{k:'CH',a:mmChA,q:mmChQ},{k:'LCT',a:mmLinA,q:mmLinQ},{k:'MAT',a:mmMatA,q:mmMatQ}];
+
+  const dadosAlunos = com.map(a=>{
+    const sims = a.simulados||[];
+    const t = Math.max(1, Math.floor(sims.length/3));
+    const ie = mmCalcIE(sims);
+    const im = mmCalcIM(ie);
+    const ieA = mmCalcIEAreas(sims);
+
+    const areas = {};
+    fns.forEach(({k,a:fa,q:fq})=>{
+      const vIni = sims.slice(0,t).map(s=>mmPct(fa(s),fq(s))).filter(v=>v!==null);
+      const vFim = sims.slice(-t).map(s=>mmPct(fa(s),fq(s))).filter(v=>v!==null);
+      const pi = vIni.length ? Math.round(mmAvg(vIni)) : null;
+      const pf = vFim.length ? Math.round(mmAvg(vFim)) : null;
+      areas[k] = {
+        patamar_inicial: pi,
+        patamar_final: pf,
+        delta_bruto: pi!==null&&pf!==null ? pf-pi : null,
+        fator_dificuldade: pi!==null ? Math.round(mmFatorDificuldade(pi)*10)/10 : null,
+        delta_ponderado: ieA?.[k]?.deltaPond ?? null,
+      };
+    });
+
+    // Média geral por bloco (para ver trajetória)
+    const mediaBlocoGeral = (bloco) => {
+      const vals = fns.map(({a:fa,q:fq})=>{
+        const vs = bloco.map(s=>mmPct(fa(s),fq(s))).filter(v=>v!==null);
+        return vs.length ? mmAvg(vs) : null;
+      }).filter(v=>v!==null);
+      return vals.length ? Math.round(mmAvg(vals)) : null;
+    };
+    const blocoTam = Math.max(1, Math.floor(sims.length/3));
+    const trajetoria = {
+      inicio: mediaBlocoGeral(sims.slice(0, blocoTam)),
+      meio:   sims.length>=6 ? mediaBlocoGeral(sims.slice(blocoTam, 2*blocoTam)) : null,
+      final:  mediaBlocoGeral(sims.slice(-blocoTam)),
+    };
+
+    const deltaMedioAreas = Object.values(areas).map(v=>v.delta_bruto).filter(v=>v!==null);
+    const emRegressao = deltaMedioAreas.length && mmAvg(deltaMedioAreas) < 0;
+
+    return {
+      nome: a.nome,
+      objetivo: a.objetivo||'',
+      total_simulados: sims.length,
+      im,
+      faixa: mmLabelIM(im),
+      em_regressao: emRegressao,
+      trajetoria_geral: trajetoria,
+      areas,
+    };
+  });
+
+  const ims = dadosAlunos.map(d=>d.im).filter(v=>v!==null);
+  const regressao = dadosAlunos.filter(d=>d.em_regressao);
+
+  const relatorio = {
+    gerado_em: new Date().toLocaleString('pt-BR'),
+    resumo_turma: {
+      total_alunos: alunos.length,
+      alunos_avaliados: com.length,
+      alunos_sem_dados_suficientes: alunos.length - com.length,
+      im_medio: ims.length ? Math.round(mmAvg(ims)) : null,
+      im_maximo: ims.length ? Math.max(...ims) : null,
+      im_minimo: ims.length ? Math.min(...ims) : null,
+      distribuicao_faixas: {
+        excelente: ims.filter(v=>v>=80).length,
+        bom:       ims.filter(v=>v>=65&&v<80).length,
+        regular:   ims.filter(v=>v>=50&&v<65).length,
+        atencao:   ims.filter(v=>v<50).length,
+      },
+      alunos_em_regressao: regressao.length,
+    },
+    metodologia: {
+      descricao: 'IM = Índice de Evolução ponderado pela dificuldade de crescimento a partir do patamar inicial.',
+      formula: 'Para cada área: delta = media(ultimo_terco) - media(primeiro_terco). Fator = 1.0 + (patamar_inicial/100) * 2.25. Delta_ponderado = delta * fator. IM = normalizado(media(deltas_ponderados)) em escala 0-100 onde 50 = sem evolução.',
+      minimo_simulados: 3,
+      janela: 'Primeiro terço vs. último terço dos simulados do aluno.',
+    },
+    alunos: dadosAlunos.sort((a,b)=>(b.im??-1)-(a.im??-1)),
+  };
+
+  // Copiar para clipboard
+  const texto = JSON.stringify(relatorio, null, 2);
+  navigator.clipboard.writeText(texto).then(()=>{
+    alert('✅ Dados copiados para a área de transferência.\n\nCole diretamente na conversa com a IA para análise.');
+  }).catch(()=>{
+    // Fallback: baixar como arquivo
+    const blob = new Blob([texto], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `analise_mentoria_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  });
 }
 
 // ── Hook na navegação — consolidado no override acima (agenda + métricas) ──
