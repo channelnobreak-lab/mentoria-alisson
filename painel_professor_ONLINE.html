@@ -4254,18 +4254,26 @@ function mmCalcIMManutencao(sims, enemHistorico){
   const inicio = sims.slice(0, t);
   const fim    = sims.slice(-t);
 
+  // Filtrar Versa do cálculo de piso e consistência
+  // O Versa tem viés sistemático de -7pp em CN e -7pp em MAT — distorce a consistência real
+  function isVersa(s){ const n=(s.nome||'').toUpperCase(); return n.includes('VER')&&!n.includes('VERIF'); }
+  const simsSemVersa = sims.filter(s=>!isVersa(s));
+  // Se remover o Versa deixar menos de 2 simulados, usa todos (fallback)
+  const simsBase = simsSemVersa.length >= 2 ? simsSemVersa : sims;
+  const inicioBase = simsBase.slice(0, Math.max(1, Math.floor(simsBase.length/3)));
+
   // ── 1. Piso (40%) ──────────────────────────────────────────
-  // Pega o terço de simulados com menor média geral
-  const mediaPorSim = sims.map(s=>{
+  // Terço mais fraco dos simulados não-Versa
+  const mediaPorSim = simsBase.map(s=>{
     const vals = areas.map(({a,q})=>mmPct(a(s),q(s))).filter(v=>v!==null);
     return vals.length ? mmAvg(vals) : null;
   });
-  const simsOrdenados = sims.map((s,i)=>({s,m:mediaPorSim[i]}))
+  const simsOrdenados = simsBase.map((s,i)=>({s,m:mediaPorSim[i]}))
     .filter(x=>x.m!==null).sort((a,b)=>a.m-b.m);
   const tercoInf = simsOrdenados.slice(0, Math.max(1, Math.floor(simsOrdenados.length/3))).map(x=>x.s);
 
   const scorePisoAreas = areas.map(({a,q})=>{
-    const ini  = inicio.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    const ini  = inicioBase.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
     const piso = tercoInf.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
     if(!ini.length || !piso.length) return null;
     return Math.min(100, Math.round(mmAvg(piso)/mmAvg(ini)*100));
@@ -4273,10 +4281,10 @@ function mmCalcIMManutencao(sims, enemHistorico){
   const scorePiso = scorePisoAreas.length ? Math.round(mmAvg(scorePisoAreas)) : null;
 
   // ── 2. Consistência (40%) ──────────────────────────────────
-  // DP dos resultados por área: DP=0→100, DP≥15→0
+  // DP dos simulados não-Versa: DP=0→100, DP≥15→0
   const DP_MAX = 15;
   const scoreConsistAreas = areas.map(({a,q})=>{
-    const vals = sims.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    const vals = simsBase.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
     if(vals.length < 2) return null;
     const avg = mmAvg(vals);
     const dp  = Math.sqrt(vals.reduce((s,v)=>s+(v-avg)**2,0)/vals.length);
@@ -4301,7 +4309,6 @@ function mmCalcIMManutencao(sims, enemHistorico){
       }).filter(v=>v!==null);
       if(pAtualAreas.length){
         const delta = mmAvg(pAtualAreas) - pEnem;
-        // +10pp = 100, 0 = 50, -10pp = 0
         scoreEnem = Math.max(0, Math.min(100, Math.round(50 + delta*5)));
       }
     }
@@ -4317,7 +4324,8 @@ function mmCalcIMManutencao(sims, enemHistorico){
   return {
     im: Math.round(soma/pesoTotal),
     scorePiso, scoreConsist, scoreEnem,
-    tipo: 'manutencao'
+    tipo: 'manutencao',
+    notaVersa: `Simulados Versa excluídos do piso e consistência (${sims.length - simsBase.length} simulados filtrados).`
   };
 }
 
