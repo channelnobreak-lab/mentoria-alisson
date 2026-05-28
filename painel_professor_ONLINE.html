@@ -821,6 +821,16 @@ tr:hover td{background:var(--bg);}
             <div id="aluno-im-badge" style="margin-left:auto;font-size:24px;font-weight:800;font-family:var(--font-display)"></div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px" id="aluno-mm-cards"></div>
+          <!-- Botão de relatório -->
+          <div style="margin-top:14px;text-align:right">
+            <button class="btn btn-secondary" onclick="mmGerarRelatorioAluno()" style="font-size:12px" id="btn-relatorio-aluno">
+              📋 Ver relatório completo
+            </button>
+          </div>
+          <!-- Área do relatório (expansível) -->
+          <div id="aluno-relatorio-wrap" style="display:none;margin-top:16px;border-top:1px solid var(--border2);padding-top:16px">
+            <div id="aluno-relatorio-conteudo"></div>
+          </div>
         </div>
       </div>
 
@@ -4212,6 +4222,118 @@ function mmCalcIEAreas(sims){
 }
 
 // IM = IE v2
+// ── Patamar inicial e perfil ─────────────────────────────────
+const LIMIAR_MANUTENCAO = 80;
+
+function mmPatamarInicial(sims){
+  if(!sims.length) return null;
+  const t = Math.max(1, Math.floor(sims.length/3));
+  const inicio = sims.slice(0, t);
+  const areas = [{a:mmCnA,q:mmCnQ},{a:mmMatA,q:mmMatQ},{a:mmChA,q:mmChQ}];
+  const vals = areas.map(({a,q})=>{
+    const v = inicio.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    return v.length ? mmAvg(v) : null;
+  }).filter(v=>v!==null);
+  return vals.length ? Math.round(mmAvg(vals)) : null;
+}
+
+function mmPerfil(sims){
+  const pi = mmPatamarInicial(sims);
+  if(pi===null) return null;
+  return pi >= LIMIAR_MANUTENCAO ? 'manutencao' : 'crescimento';
+}
+
+// ══════════════════════════════════════════════════════════════
+// IM DE MANUTENÇÃO — patamar inicial ≥ 80%
+// Piso (40%) + Consistência (40%) + ENEM anterior (20%)
+// ══════════════════════════════════════════════════════════════
+function mmCalcIMManutencao(sims, enemHistorico){
+  if(sims.length < 3) return null;
+  const areas = [{a:mmCnA,q:mmCnQ},{a:mmMatA,q:mmMatQ},{a:mmChA,q:mmChQ}];
+  const t = Math.max(1, Math.floor(sims.length/3));
+  const inicio = sims.slice(0, t);
+  const fim    = sims.slice(-t);
+
+  // ── 1. Piso (40%) ──────────────────────────────────────────
+  // Pega o terço de simulados com menor média geral
+  const mediaPorSim = sims.map(s=>{
+    const vals = areas.map(({a,q})=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    return vals.length ? mmAvg(vals) : null;
+  });
+  const simsOrdenados = sims.map((s,i)=>({s,m:mediaPorSim[i]}))
+    .filter(x=>x.m!==null).sort((a,b)=>a.m-b.m);
+  const tercoInf = simsOrdenados.slice(0, Math.max(1, Math.floor(simsOrdenados.length/3))).map(x=>x.s);
+
+  const scorePisoAreas = areas.map(({a,q})=>{
+    const ini  = inicio.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    const piso = tercoInf.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    if(!ini.length || !piso.length) return null;
+    return Math.min(100, Math.round(mmAvg(piso)/mmAvg(ini)*100));
+  }).filter(v=>v!==null);
+  const scorePiso = scorePisoAreas.length ? Math.round(mmAvg(scorePisoAreas)) : null;
+
+  // ── 2. Consistência (40%) ──────────────────────────────────
+  // DP dos resultados por área: DP=0→100, DP≥15→0
+  const DP_MAX = 15;
+  const scoreConsistAreas = areas.map(({a,q})=>{
+    const vals = sims.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+    if(vals.length < 2) return null;
+    const avg = mmAvg(vals);
+    const dp  = Math.sqrt(vals.reduce((s,v)=>s+(v-avg)**2,0)/vals.length);
+    return Math.max(0, Math.round(100-(dp/DP_MAX)*100));
+  }).filter(v=>v!==null);
+  const scoreConsist = scoreConsistAreas.length ? Math.round(mmAvg(scoreConsistAreas)) : null;
+
+  // ── 3. ENEM anterior (20%) ────────────────────────────────
+  let scoreEnem = null;
+  if(enemHistorico && enemHistorico.length){
+    const ult = [...enemHistorico].sort((a,b)=>(b.ano||0)-(a.ano||0))[0];
+    const pcts = [
+      ult.cn  != null ? Math.round(ult.cn/45*100)  : null,
+      ult.mat != null ? Math.round(ult.mat/45*100) : null,
+      ult.ch  != null ? Math.round(ult.ch/45*100)  : null,
+    ].filter(v=>v!==null);
+    if(pcts.length){
+      const pEnem = mmAvg(pcts);
+      const pAtualAreas = areas.map(({a,q})=>{
+        const vals = fim.map(s=>mmPct(a(s),q(s))).filter(v=>v!==null);
+        return vals.length ? mmAvg(vals) : null;
+      }).filter(v=>v!==null);
+      if(pAtualAreas.length){
+        const delta = mmAvg(pAtualAreas) - pEnem;
+        // +10pp = 100, 0 = 50, -10pp = 0
+        scoreEnem = Math.max(0, Math.min(100, Math.round(50 + delta*5)));
+      }
+    }
+  }
+
+  // ── Composição ────────────────────────────────────────────
+  let soma = 0, pesoTotal = 0;
+  if(scorePiso    !== null){ soma += scorePiso    * 0.40; pesoTotal += 0.40; }
+  if(scoreConsist !== null){ soma += scoreConsist * 0.40; pesoTotal += 0.40; }
+  if(scoreEnem    !== null){ soma += scoreEnem    * 0.20; pesoTotal += 0.20; }
+  if(!pesoTotal) return null;
+
+  return {
+    im: Math.round(soma/pesoTotal),
+    scorePiso, scoreConsist, scoreEnem,
+    tipo: 'manutencao'
+  };
+}
+
+// ── Função principal — escolhe o perfil automaticamente ───────
+function mmCalcIMCompleto(sims, enemHistorico){
+  if(!sims || sims.length < 3) return null;
+  const perfil = mmPerfil(sims);
+  if(perfil === 'manutencao'){
+    return mmCalcIMManutencao(sims, enemHistorico);
+  } else {
+    const ie = mmCalcIE(sims);
+    return ie !== null ? {im:ie, tipo:'crescimento'} : null;
+  }
+}
+
+// Compatibilidade — mmCalcIM ainda usado em lugares antigos
 function mmCalcIM(ie){ return ie; }
 
 // ── Exportação detalhada por simulado ────────────────────────
@@ -4305,17 +4427,22 @@ function mmExportarDetalhado(){
 
 function mmCorIM(v){
   if(v===null) return 'var(--muted)';
-  if(v>=75) return '#1A6B5C';
+  if(v>=80) return '#1A6B5C';
+  if(v>=65) return '#2E86AB';
   if(v>=50) return '#B8860B';
   return '#8B1A1A';
 }
 
 function mmLabelIM(v){
   if(v===null) return 'Dados insuficientes';
-  if(v>=80) return 'Excelente evolução';
-  if(v>=65) return 'Boa evolução';
-  if(v>=50) return 'Evolução moderada';
-  return 'Atenção — pouco crescimento';
+  if(v>=80) return 'Excelente';
+  if(v>=65) return 'Bom';
+  if(v>=50) return 'Regular';
+  return 'Atenção';
+}
+
+function mmLabelPerfil(perfil){
+  return perfil==='manutencao' ? '🔒 Manutenção' : '📈 Crescimento';
 }
 
 // ── Renderização turma ────────────────────────────────────────
@@ -4331,10 +4458,12 @@ function renderMetricasMentoria(){
 
   const dados = com.map(a=>{
     const sims = a.simulados||[];
-    const ie   = mmCalcIE(sims);
-    const im   = mmCalcIM(ie);
+    const resultado = mmCalcIMCompleto(sims, a.enemHistorico);
+    const ie   = resultado?.tipo==='crescimento' ? resultado.im : mmCalcIE(sims);
+    const im   = resultado?.im ?? null;
+    const tipo = resultado?.tipo ?? null;
     const ieA  = mmCalcIEAreas(sims);
-    return {a, ie, im, ieA};
+    return {a, ie, im, tipo, resultado, ieA};
   });
 
   const ims = dados.map(d=>d.im).filter(v=>v!==null);
@@ -4627,6 +4756,7 @@ function renderMetricasMentoria(){
           <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Patamar inicial</th>
           <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Patamar final</th>
           <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Delta bruto</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">Perfil</th>
           <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">Status</th>
         </tr></thead><tbody>
         ${ranking.map((d,i)=>{
@@ -4652,6 +4782,7 @@ function renderMetricasMentoria(){
             <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pi!==null?pi+'%':'—'}</td>
             <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pf!==null?pf+'%':'—'}</td>
             <td style="padding:6px 8px;text-align:center;font-weight:600;color:${dCor}">${delta!==null?(delta>0?'+':'')+delta+'pp':'—'}</td>
+            <td style="padding:6px 8px;font-size:10px;color:var(--muted)">${mmLabelPerfil(d.tipo)}</td>
             <td style="padding:6px 8px;color:${mmCorIM(d.im)}">${mmLabelIM(d.im)}</td>
           </tr>`;
         }).join('')}
@@ -4661,46 +4792,309 @@ function renderMetricasMentoria(){
 
 // ── Renderização individual ───────────────────────────────────
 function renderMetricasAluno(a){
-  const sims   = a.simulados||[];
-  const ie     = mmCalcIE(sims);
-  const im     = mmCalcIM(ie);
-  const ieAreas= mmCalcIEAreas(sims);
+  const sims      = a.simulados||[];
+  const resultado = mmCalcIMCompleto(sims, a.enemHistorico);
+  const im        = resultado?.im ?? null;
+  const tipo      = resultado?.tipo ?? null;
+  const perfil    = mmPerfil(sims);
+  const ieAreas   = mmCalcIEAreas(sims);
 
   // Badge IM
   const badge = document.getElementById('aluno-im-badge');
   if(badge){
-    badge.textContent = im!==null ? `IM ${im}` : sims.length<2?'IM —':'IM —';
+    badge.textContent = im!==null ? `IM ${im}` : '—';
     badge.style.color = mmCorIM(im);
-    badge.title = mmLabelIM(im);
+    badge.title = `${mmLabelIM(im)} · ${mmLabelPerfil(tipo)}`;
   }
 
-  // Cards por área
   const cardsEl = document.getElementById('aluno-mm-cards');
-  if(cardsEl && ieAreas){
-    const areas = [{k:'CN',l:'Natureza',c:'#1A6B5C'},{k:'CH',l:'Humanas',c:'#7D3C00'},{k:'LCT',l:'Linguagens',c:'#1A3F6B'},{k:'MAT',l:'Matemática',c:'#8B1A1A'}];
-    cardsEl.innerHTML = areas.map(({k,l,c})=>{
-      const d=ieAreas[k];
-      if(!d||d.ini===null) return `<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
+  if(!cardsEl) return;
+
+  if(sims.length < 3){
+    cardsEl.innerHTML='<p style="font-size:12px;color:var(--muted);grid-column:1/-1">Necessário pelo menos 3 simulados para calcular o índice.</p>';
+    return;
+  }
+
+  // Tag de perfil
+  const tagPerfil = tipo ? `<span style="font-size:11px;background:${tipo==='manutencao'?'#1A3F6B':'#1A6B5C'}22;color:${tipo==='manutencao'?'#1A3F6B':'#1A6B5C'};border-radius:12px;padding:2px 10px;font-weight:600">${mmLabelPerfil(tipo)}</span>` : '';
+  const badgeEl = document.getElementById('aluno-im-badge');
+  if(badgeEl) badgeEl.innerHTML = im!==null ? `IM ${im} ${tagPerfil}` : '—';
+
+  if(tipo === 'manutencao'){
+    // Cards de manutenção: Piso + Consistência + ENEM anterior
+    const {scorePiso, scoreConsist, scoreEnem} = resultado;
+    const pi = mmPatamarInicial(sims);
+    cardsEl.innerHTML = [
+      {l:'Piso de desempenho', v:scorePiso!==null?scorePiso:'—', sub:'Terço mais fraco vs. início', c:'#1A3F6B'},
+      {l:'Consistência', v:scoreConsist!==null?scoreConsist:'—', sub:'Estabilidade ao longo do ano', c:'#1A6B5C'},
+      {l:'vs. ENEM anterior', v:scoreEnem!==null?scoreEnem:'—', sub:scoreEnem!==null?'Evolução inter-ENEM':'Sem ENEM anterior', c:'#7D3C00'},
+      {l:'Patamar de entrada', v:pi!==null?pi+'%':'—', sub:'Média CN+MAT+CH (início)', c:'var(--muted)'},
+    ].map(c=>`<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:${mmCorIM(typeof c.v==='number'?c.v:null)};font-family:var(--font-display)">${c.v}</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${c.l}</div>
+      <div style="font-size:10px;color:var(--muted)">${c.sub}</div>
+    </div>`).join('');
+
+  } else {
+    // Cards de crescimento: delta por área
+    const areas = [
+      {k:'CN', l:'Natureza',   c:'#1A6B5C'},
+      {k:'MAT',l:'Matemática', c:'#8B1A1A'},
+      {k:'CH', l:'Humanas',    c:'#7D3C00'},
+      {k:'LCT',l:'Linguagens', c:'#1A3F6B', info:true},
+    ];
+    cardsEl.innerHTML = areas.map(({k,l,c,info})=>{
+      const d = ieAreas?.[k];
+      const label = info ? `${l} <span style="font-size:9px;color:var(--muted)">(informativo)</span>` : l;
+      if(!d||d.ini===null) return `<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center;opacity:${info?'.6':'1'}">
         <div style="font-size:18px;font-weight:800;color:var(--muted)">—</div>
-        <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${l}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${label}</div>
         <div style="font-size:10px;color:var(--muted)">Sem dados</div>
       </div>`;
-      const dCor=d.delta>0?'#1A6B5C':d.delta<0?'#8B1A1A':'var(--muted)';
-      return `<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
+      const dCor = d.delta>0?'#1A6B5C':d.delta<0?'#8B1A1A':'var(--muted)';
+      return `<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center;opacity:${info?'.6':'1'}">
         <div style="font-size:18px;font-weight:800;color:${dCor}">${d.delta>0?'+':''}${d.delta??'—'}pp</div>
-        <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${Math.round(d.ini??0)}% → ${Math.round(d.fim??0)}%</div>
-        <div style="font-size:11px;font-weight:600;color:var(--text);margin:2px 0">${l}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${d.ini}% → ${d.fim}%</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:2px 0">${label}</div>
         <div style="font-size:10px;color:${c}">fator ${d.fator}×</div>
       </div>`;
     }).join('');
-  } else if(cardsEl){
-    cardsEl.innerHTML = sims.length<3
-      ? '<p style="font-size:12px;color:var(--muted);grid-column:1/-1">Necessário pelo menos 3 simulados para calcular o índice (usa primeiro e último terço).</p>'
-      : '';
   }
 }
 
-// ── Exportar análise para IA ──────────────────────────────────
+// ── Relatório completo do aluno ───────────────────────────────
+function mmGerarRelatorioAluno(){
+  const a = alunoAtual;
+  if(!a) return;
+
+  const wrap = document.getElementById('aluno-relatorio-wrap');
+  const conteudo = document.getElementById('aluno-relatorio-conteudo');
+  const btn = document.getElementById('btn-relatorio-aluno');
+
+  // Toggle
+  if(wrap.style.display !== 'none'){
+    wrap.style.display = 'none';
+    btn.textContent = '📋 Ver relatório completo';
+    return;
+  }
+
+  const sims      = a.simulados||[];
+  const resultado = mmCalcIMCompleto(sims, a.enemHistorico);
+  const im        = resultado?.im ?? null;
+  const tipo      = resultado?.tipo ?? null;
+  const ieAreas   = mmCalcIEAreas(sims);
+  const pi        = mmPatamarInicial(sims);
+  const t         = Math.max(1, Math.floor(sims.length/3));
+  const areas     = ['CN','MAT','CH','LCT'];
+  const areaLabel = {CN:'Natureza',MAT:'Matemática',CH:'Humanas',LCT:'Linguagens'};
+  const areasIM   = ['CN','MAT','CH'];
+
+  if(!resultado || sims.length < 3){
+    conteudo.innerHTML = '<p style="font-size:13px;color:var(--muted)">Dados insuficientes para gerar relatório (mínimo 3 simulados).</p>';
+    wrap.style.display = 'block';
+    btn.textContent = '▲ Fechar relatório';
+    return;
+  }
+
+  // ── Seção 1: Síntese ─────────────────────────────────────
+  const corIM = mmCorIM(im);
+  const labelIM = mmLabelIM(im);
+  const labelPerfil = mmLabelPerfil(tipo);
+
+  let html = `
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+      <div style="text-align:center;min-width:80px">
+        <div style="font-size:48px;font-weight:800;color:${corIM};font-family:var(--font-display);line-height:1">${im}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Índice de Mentoria</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">${labelIM} · ${labelPerfil}</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">${mmTextoSintese(a, resultado, im, tipo, pi, ieAreas)}</div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border2);margin:16px 0">
+  `;
+
+  // ── Seção 2: Análise por área ─────────────────────────────
+  html += `<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Análise por área</div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px">`;
+
+  areas.forEach(k=>{
+    const d = ieAreas?.[k];
+    const nomeArea = areaLabel[k];
+    const noIM = k === 'LCT';
+    if(!d || d.ini===null){
+      html += `<div style="background:var(--surface2);border-radius:8px;padding:12px;opacity:.6">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${nomeArea}${noIM?' <span style="font-size:9px">(informativo)</span>':''}</div>
+        <div style="font-size:12px;color:var(--muted)">Sem dados suficientes</div>
+      </div>`;
+      return;
+    }
+    const dCor = d.delta>0?'#1A6B5C':d.delta<0?'#8B1A1A':'var(--muted)';
+    const texto = mmTextoArea(k, d, tipo);
+    html += `<div style="background:var(--surface2);border-radius:8px;padding:12px;opacity:${noIM?.7:1}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${nomeArea}${noIM?' <span style="font-size:9px">(informativo)</span>':''}</div>
+        <div style="font-size:16px;font-weight:800;color:${dCor}">${d.delta>0?'+':''}${d.delta}pp</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${d.ini}% → ${d.fim}%${noIM?'':' · fator '+d.fator+'×'}</div>
+      <div style="font-size:12px;color:var(--text);line-height:1.5">${texto}</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // ── Seção 3: Componentes do IM (manutenção) ───────────────
+  if(tipo === 'manutencao'){
+    const {scorePiso, scoreConsist, scoreEnem} = resultado;
+    html += `<hr style="border:none;border-top:1px solid var(--border2);margin:16px 0">
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Componentes do IM de Manutenção</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+      ${[
+        {l:'Piso de desempenho', v:scorePiso, w:'40%', desc:'Média do terço mais fraco vs. patamar inicial. Mede o quanto o aluno segurou nos momentos difíceis.'},
+        {l:'Consistência', v:scoreConsist, w:'40%', desc:'Baseado no desvio padrão dos resultados. Quanto menor a oscilação, maior o score.'},
+        {l:'vs. ENEM anterior', v:scoreEnem, w:'20%', desc:scoreEnem!==null?'Compara patamar atual com ENEM anterior cadastrado.':'Sem ENEM anterior cadastrado — peso redistribuído.'},
+      ].map(c=>`<div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:${mmCorIM(c.v)}">${c.v??'—'}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${c.l}</div>
+        <div style="font-size:10px;color:var(--muted)">${c.w} do IM</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">${c.desc}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // ── Seção 4: Pontos de atenção ────────────────────────────
+  const atencao = mmPontosAtencao(a, resultado, ieAreas, tipo);
+  if(atencao.length){
+    html += `<hr style="border:none;border-top:1px solid var(--border2);margin:16px 0">
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">⚠ Pontos de atenção</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      ${atencao.map(p=>`<div style="padding:10px 14px;background:#FFF5F5;border-left:3px solid #8B1A1A;border-radius:6px;font-size:12px;color:var(--text);line-height:1.5">${p}</div>`).join('')}
+    </div>`;
+  }
+
+  // ── Seção 5: Exportar ─────────────────────────────────────
+  html += `<div style="text-align:right;margin-top:8px">
+    <button class="btn btn-secondary" onclick="mmCopiarRelatorio('${a.id}')" style="font-size:11px">📤 Copiar texto do relatório</button>
+  </div>`;
+
+  conteudo.innerHTML = html;
+  wrap.style.display = 'block';
+  btn.textContent = '▲ Fechar relatório';
+}
+
+// ── Textos gerados ────────────────────────────────────────────
+function mmTextoSintese(a, resultado, im, tipo, pi, ieAreas){
+  const nome = a.nome.split(' ')[0];
+  if(tipo === 'crescimento'){
+    if(im >= 80) return `${nome} apresenta crescimento expressivo — a evolução ponderada pela dificuldade do patamar de partida coloca este aluno entre os de melhor desempenho da turma. O processo está funcionando.`;
+    if(im >= 65) return `${nome} mostra crescimento consistente. O ritmo de evolução está dentro do esperado para o estágio de preparação.`;
+    if(im >= 50) return `${nome} apresenta crescimento moderado. Há evolução, mas o ritmo pode ser acelerado com ajuste de foco nas áreas mais defasadas.`;
+    return `${nome} mostra pouco crescimento até o momento. Vale investigar se há algum fator externo ao processo pedagógico ou se é necessário revisar a abordagem.`;
+  } else {
+    if(im >= 80) return `${nome} partiu de patamar alto (${pi}%) e está mantendo o nível com excelente consistência. A tarefa aqui não é crescer — é não regredir sob pressão. Está cumprindo bem.`;
+    if(im >= 65) return `${nome} partiu de patamar alto (${pi}%) e está mantendo o nível de forma satisfatória. Algumas oscilações são normais neste estágio — o importante é o piso se manter sólido.`;
+    if(im >= 50) return `${nome} partiu de patamar alto (${pi}%), mas há oscilação relevante nos resultados. O piso de desempenho merece atenção — quedas pontencialmente problemáticas em algumas provas.`;
+    return `${nome} partiu de patamar alto (${pi}%), mas está apresentando instabilidade preocupante. Quedas no piso de desempenho ou alta oscilação indicam que algo no processo precisa ser revisado.`;
+  }
+}
+
+function mmTextoArea(k, d, tipo){
+  const {ini, fim, delta, fator} = d;
+  if(tipo === 'crescimento'){
+    if(delta > 10) return `Crescimento forte. Partiu de ${ini}% e chegou a ${fim}% — uma evolução de ${delta}pp que, ponderada pelo patamar de entrada (fator ${fator}×), representa ganho pedagógico significativo.`;
+    if(delta > 3)  return `Crescimento moderado de ${delta}pp. Trajetória positiva, com margem para avançar mais.`;
+    if(delta >= 0) return `Estável — crescimento mínimo de ${delta}pp. A área está sendo mantida mas não avançando. Avaliar se há capacidade de aceleração.`;
+    if(delta > -5) return `Leve queda de ${Math.abs(delta)}pp. Pode ser variação natural de prova — monitorar nas próximas semanas.`;
+    return `Queda relevante de ${Math.abs(delta)}pp (de ${ini}% para ${fim}%). Área que precisa de atenção específica na próxima etapa.`;
+  } else {
+    if(delta > 5)  return `Cresceu ${delta}pp mesmo partindo de patamar já alto (${ini}%). Resultado muito positivo.`;
+    if(delta >= 0) return `Estável em torno de ${ini}%. Manutenção dentro do esperado para este nível.`;
+    if(delta > -5) return `Queda leve de ${Math.abs(delta)}pp — de ${ini}% para ${fim}%. Monitorar se a tendência se confirma.`;
+    return `Queda de ${Math.abs(delta)}pp — de ${ini}% para ${fim}%. Em patamar alto, qualquer queda merece atenção imediata.`;
+  }
+}
+
+function mmPontosAtencao(a, resultado, ieAreas, tipo){
+  const pontos = [];
+  const sims = a.simulados||[];
+
+  // Regressão em área específica
+  ['CN','MAT','CH'].forEach(k=>{
+    const d = ieAreas?.[k];
+    if(d && d.delta !== null && d.delta <= -8){
+      pontos.push(`<strong>${{CN:'Natureza',MAT:'Matemática',CH:'Humanas'}[k]}</strong>: queda de ${Math.abs(d.delta)}pp (${d.ini}% → ${d.fim}%). Queda expressiva que requer intervenção direta.`);
+    }
+  });
+
+  // LCT informativo
+  const lct = ieAreas?.LCT;
+  if(lct && lct.delta !== null && lct.delta <= -10){
+    pontos.push(`<strong>Linguagens</strong>: queda de ${Math.abs(lct.delta)}pp registrada nos simulados. Lembrando que LCT tem ruído de calibração de banca — verificar se a queda é real ou artefato das provas de cursinho.`);
+  }
+
+  // Volume baixo de simulados
+  if(sims.length < 5){
+    pontos.push(`Volume reduzido de simulados (${sims.length}). O índice tem janela pequena — resultado menos confiável do que em alunos com mais dados.`);
+  }
+
+  // Manutenção com piso baixo
+  if(tipo === 'manutencao' && resultado.scorePiso !== null && resultado.scorePiso < 85){
+    pontos.push(`Piso de desempenho em ${resultado.scorePiso}/100. Em alunos de alto patamar, quedas nos simulados mais difíceis podem antecipar risco no ENEM real — vale investigar o que está acontecendo nesses momentos.`);
+  }
+
+  // Crescimento com IM baixo
+  if(tipo === 'crescimento' && resultado.im !== null && resultado.im < 40){
+    pontos.push(`IM baixo para o perfil de crescimento. Vale investigar fatores externos: engajamento com o processo, regularidade de estudo, situação emocional.`);
+  }
+
+  return pontos;
+}
+
+function mmCopiarRelatorio(alunoId){
+  const a = alunos.find(x=>x.id===alunoId);
+  if(!a) return;
+  const sims      = a.simulados||[];
+  const resultado = mmCalcIMCompleto(sims, a.enemHistorico);
+  const im        = resultado?.im ?? null;
+  const tipo      = resultado?.tipo ?? null;
+  const ieAreas   = mmCalcIEAreas(sims);
+  const pi        = mmPatamarInicial(sims);
+
+  const areaLabel = {CN:'Natureza',MAT:'Matemática',CH:'Humanas',LCT:'Linguagens (informativo)'};
+  const linhas = [
+    `RELATÓRIO DE MÉTRICAS — ${a.nome.toUpperCase()}`,
+    `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+    ``,
+    `ÍNDICE DE MENTORIA: ${im??'—'} · ${mmLabelIM(im)} · ${mmLabelPerfil(tipo)}`,
+    ``,
+    mmTextoSintese(a, resultado, im, tipo, pi, ieAreas),
+    ``,
+    `ANÁLISE POR ÁREA:`,
+  ];
+  ['CN','MAT','CH','LCT'].forEach(k=>{
+    const d = ieAreas?.[k];
+    if(!d||d.ini===null){ linhas.push(`${areaLabel[k]}: sem dados`); return; }
+    linhas.push(`${areaLabel[k]}: ${d.ini}% → ${d.fim}% (${d.delta>0?'+':''}${d.delta}pp) — ${mmTextoArea(k,d,tipo)}`);
+  });
+
+  if(tipo==='manutencao'){
+    const {scorePiso,scoreConsist,scoreEnem} = resultado;
+    linhas.push(``, `COMPONENTES DO IM DE MANUTENÇÃO:`);
+    linhas.push(`Piso: ${scorePiso??'—'}/100 (40%)`);
+    linhas.push(`Consistência: ${scoreConsist??'—'}/100 (40%)`);
+    linhas.push(`vs. ENEM anterior: ${scoreEnem??'sem dados'}/100 (20%)`);
+  }
+
+  const atencao = mmPontosAtencao(a, resultado, ieAreas, tipo);
+  if(atencao.length){
+    linhas.push(``, `PONTOS DE ATENÇÃO:`);
+    atencao.forEach((p,i)=>linhas.push(`${i+1}. ${p.replace(/<[^>]+>/g,'')}`));
+  }
+
+  navigator.clipboard.writeText(linhas.join('\n')).then(()=>{
+    alert('✅ Relatório copiado para o clipboard.');
+  }).catch(()=>{ alert('Erro ao copiar. Tente novamente.'); });
+}
 function mmExportarAnalise(){
   const com = alunos.filter(a=>(a.simulados||[]).length>=3);
   if(!com.length){ alert('Nenhum aluno com dados suficientes.'); return; }
