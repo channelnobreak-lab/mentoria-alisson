@@ -638,7 +638,6 @@ tr:hover td{background:var(--bg);}
         <div class="card"><div class="card-title">Sessões registradas</div><div id="ag-sem-lista"></div></div>
       </div>
     </div><!-- fim ov-agenda -->
-    </div><!-- fim overview-panel -->
 
     <!-- ══════════════════════════ MÉTRICAS DE MENTORIA ══════════════════════════ -->
     <div id="ov-metricas-mentoria" class="painel-section" style="display:none">
@@ -676,7 +675,8 @@ tr:hover td{background:var(--bg);}
         <div class="card-title">Ranking — Índice de Mentoria por aluno</div>
         <div id="mm-ranking-im"></div>
       </div>
-    </div>
+    </div><!-- fim ov-metricas-mentoria -->
+    </div><!-- fim overview-panel -->
 
     <!-- MODAL SLOT DA GRADE -->
     <div class="modal-overlay" id="modal-ag-slot">
@@ -805,8 +805,7 @@ tr:hover td{background:var(--bg);}
             <div class="card-title" style="margin-bottom:0">📊 Métricas de acompanhamento</div>
             <div id="aluno-im-badge" style="margin-left:auto;font-size:24px;font-weight:800;font-family:var(--font-display)"></div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px" id="aluno-mm-cards"></div>
-          <div class="chart-wrap" style="height:180px"><canvas id="chart-aluno-mm-evol"></canvas></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px" id="aluno-mm-cards"></div>
         </div>
       </div>
 
@@ -4128,10 +4127,6 @@ showOverviewTab = function(id,btn){
 function mmPct(a,q){ return q>0?Math.round(a/q*100):null; }
 function mmAvg(arr){ const v=arr.filter(x=>x!==null&&!isNaN(x)); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
 
-function mmAreaAvgs(sims, fn, qfn){
-  return sims.map(s=>{ const q=qfn(s); return q>0?Math.round(fn(s)/q*100):null; });
-}
-
 function mmCnA(s){ return (s.bio?.a||0)+(s.qui?.a||0)+(s.fis?.a||0); }
 function mmCnQ(s){ return (s.bio?.q||0)+(s.qui?.q||0)+(s.fis?.q||0); }
 function mmChA(s){ return (s.his?.a||0)+(s.geo?.a||0)+(s.fil?.a||0)+(s.soc?.a||0); }
@@ -4139,7 +4134,15 @@ function mmChQ(s){ return (s.his?.q||0)+(s.geo?.q||0)+(s.fil?.q||0)+(s.soc?.q||0
 function mmLinA(s){ return s.lin?.a||0; } function mmLinQ(s){ return s.lin?.q||0; }
 function mmMatA(s){ return s.mat?.a||0; } function mmMatQ(s){ return s.mat?.q||0; }
 
-// Índice de Evolução — compara primeiros 2 vs últimos 2 simulados
+// Fator de dificuldade linear moderado baseado no patamar de partida
+// 0% → 1.0 | 50% → 1.75 | 75% → 2.5 | 100% → 3.25
+function mmFatorDificuldade(patamarInicial){
+  if(patamarInicial===null) return 1.0;
+  return 1.0 + (patamarInicial/100) * 2.25;
+}
+
+// IE ponderado por dificuldade — IM = IE
+// Para cada área: delta × fator(patamar inicial) → média → normaliza 0-100
 function mmCalcIE(sims){
   if(sims.length < 2) return null;
   const fns = [
@@ -4151,19 +4154,28 @@ function mmCalcIE(sims){
   const n = Math.min(2, sims.length);
   const inicio = sims.slice(0, n);
   const fim    = sims.slice(-n);
-  let deltas = [];
+
+  let deltasPonderados = [];
   fns.forEach(({a,q})=>{
     const pi = mmAvg(inicio.map(s=>mmPct(a(s),q(s))));
     const pf = mmAvg(fim.map(s=>mmPct(a(s),q(s))));
-    if(pi!==null && pf!==null) deltas.push(pf-pi);
+    if(pi===null || pf===null) return;
+    const delta  = pf - pi;
+    const fator  = mmFatorDificuldade(pi);
+    deltasPonderados.push(delta * fator);
   });
-  if(!deltas.length) return null;
-  const delta = mmAvg(deltas); // média dos deltas por área
-  // Normaliza: +20pp = 100, 0 = 50, -20pp = 0
-  return Math.max(0, Math.min(100, Math.round(50 + delta*2.5)));
+
+  if(!deltasPonderados.length) return null;
+  const deltaMedio = mmAvg(deltasPonderados);
+
+  // Normaliza para 0-100
+  // +20pp × fator 1.0 (patamar 0%) = +20 → ~100
+  // +10pp × fator 2.5 (patamar 75%) = +25 → >100 (cap em 100)
+  // 0 = 50 | -20pp × fator 1.0 = -20 → 0
+  return Math.max(0, Math.min(100, Math.round(50 + deltaMedio * 2.5)));
 }
 
-// IE por área — retorna {cn, ch, lin, mat} com valores iniciais e finais
+// IE por área — para visualização individual
 function mmCalcIEAreas(sims){
   if(sims.length < 1) return null;
   const n = Math.min(2, sims.length);
@@ -4179,56 +4191,16 @@ function mmCalcIEAreas(sims){
   areas.forEach(({k,a,q})=>{
     const pi = mmAvg(inicio.map(s=>mmPct(a(s),q(s))));
     const pf = mmAvg(fim.map(s=>mmPct(a(s),q(s))));
-    result[k] = {ini:pi, fim:pf, delta:pi!==null&&pf!==null?Math.round(pf-pi):null};
+    const delta = pi!==null&&pf!==null ? Math.round(pf-pi) : null;
+    const fator = mmFatorDificuldade(pi);
+    const deltaPond = delta!==null ? Math.round(delta*fator*10)/10 : null;
+    result[k] = {ini:pi, fim:pf, delta, fator:Math.round(fator*10)/10, deltaPond};
   });
   return result;
 }
 
-// Taxa de Conversão de Erros (0-100)
-// Proporção de matérias com erro que tiveram redução entre primeiros e últimos simulados
-function mmCalcTCE(aluno){
-  const erros = aluno.erros||[];
-  if(!erros.length) return null;
-  const sims = aluno.simulados||[];
-  if(sims.length < 2) return null;
-  // Simplificado: quantidade de erros únicos por conteúdo (menos = melhor)
-  // Comparamos proporção de erros registrados vs. total de questões respondidas
-  const totalQ = sims.reduce((s,sim)=>{
-    return s+(mmCnQ(sim)||0)+(mmChQ(sim)||0)+(mmLinQ(sim)||0)+(mmMatQ(sim)||0);
-  },0);
-  if(!totalQ) return null;
-  // Quanto menor a taxa de erros em relação às questões, melhor a conversão
-  const taxaErro = erros.length / totalQ;
-  return Math.max(0, Math.min(100, Math.round((1-taxaErro)*100)));
-}
-
-// Adesão ao cronograma — lida do objeto aluno (não temos crono no professor, usamos proxy)
-// Proxy: se o aluno tem erros recentes (últimos 30 dias) = está ativo = boa adesão
-function mmCalcAdesao(aluno){
-  // Sem dados de crono no painel do professor, usamos simulados recentes como proxy
-  const sims = aluno.simulados||[];
-  if(!sims.length) return null;
-  // Cadência: quantos simulados tem vs. semanas desde o primeiro
-  // Ideal: 1 simulado a cada 2 semanas
-  // Score baseado na regularidade
-  if(sims.length >= 8) return 100;
-  if(sims.length >= 5) return 80;
-  if(sims.length >= 3) return 60;
-  if(sims.length >= 2) return 40;
-  return 20;
-}
-
-// Índice de Mentoria composto (pesos: IE 50%, TCE 30%, Adesão 20%)
-function mmCalcIM(ie, tce, adesao){
-  const vals = [];
-  const pesos = [];
-  if(ie!==null){vals.push(ie);pesos.push(0.5);}
-  if(tce!==null){vals.push(tce);pesos.push(0.3);}
-  if(adesao!==null){vals.push(adesao);pesos.push(0.2);}
-  if(!vals.length) return null;
-  const pesoTotal = pesos.reduce((a,b)=>a+b,0);
-  return Math.round(vals.reduce((s,v,i)=>s+v*pesos[i],0)/pesoTotal);
-}
+// IM = IE (ponderado por dificuldade)
+function mmCalcIM(ie){ return ie; }
 
 function mmCorIM(v){
   if(v===null) return 'var(--muted)';
@@ -4238,66 +4210,57 @@ function mmCorIM(v){
 }
 
 function mmLabelIM(v){
-  if(v===null) return '—';
-  if(v>=80) return 'Excelente';
-  if(v>=65) return 'Bom';
-  if(v>=50) return 'Regular';
-  return 'Atenção';
+  if(v===null) return 'Dados insuficientes';
+  if(v>=80) return 'Excelente evolução';
+  if(v>=65) return 'Boa evolução';
+  if(v>=50) return 'Evolução moderada';
+  return 'Atenção — pouco crescimento';
 }
 
 // ── Renderização turma ────────────────────────────────────────
 function renderMetricasMentoria(){
-  const com = alunos.filter(a=>(a.simulados||[]).length>=1);
+  const com = alunos.filter(a=>(a.simulados||[]).length>=2);
   if(!com.length){
-    document.getElementById('mm-cards-top').innerHTML='<p style="color:var(--muted);font-size:13px">Nenhum aluno com simulados cadastrados.</p>';
+    document.getElementById('mm-cards-top').innerHTML='<p style="color:var(--muted);font-size:13px">Nenhum aluno com 2+ simulados cadastrados. O índice requer pelo menos um simulado inicial e um final.</p>';
+    ['mm-chart-evolucao','mm-chart-scatter','mm-conversao-lista','mm-adesao-lista','mm-ranking-im'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.innerHTML='';
+    });
     return;
   }
 
-  // Calcular métricas de todos
   const dados = com.map(a=>{
     const sims = a.simulados||[];
-    const ie     = mmCalcIE(sims);
-    const tce    = mmCalcTCE(a);
-    const adesao = mmCalcAdesao(a);
-    const im     = mmCalcIM(ie,tce,adesao);
-    return {a, ie, tce, adesao, im};
+    const ie   = mmCalcIE(sims);
+    const im   = mmCalcIM(ie);
+    const ieA  = mmCalcIEAreas(sims);
+    return {a, ie, im, ieA};
   });
 
-  const ims     = dados.map(d=>d.im).filter(v=>v!==null);
-  const ies     = dados.map(d=>d.ie).filter(v=>v!==null);
-  const tces    = dados.map(d=>d.tce).filter(v=>v!==null);
-  const adesoes = dados.map(d=>d.adesao).filter(v=>v!==null);
-
-  const imMedio  = ims.length    ? Math.round(mmAvg(ims))     : null;
-  const ieMedio  = ies.length    ? Math.round(mmAvg(ies))     : null;
-  const tceMedio = tces.length   ? Math.round(mmAvg(tces))    : null;
-  const adMedio  = adesoes.length? Math.round(mmAvg(adesoes)) : null;
+  const ims = dados.map(d=>d.im).filter(v=>v!==null);
+  const imMedio = ims.length ? Math.round(mmAvg(ims)) : null;
 
   // Cards do topo
+  const semDados = alunos.filter(a=>(a.simulados||[]).length<2).length;
   const cards = [
-    {l:'Índice de Mentoria', v:imMedio!==null?imMedio+'':'—', sub:mmLabelIM(imMedio), cor:mmCorIM(imMedio)},
-    {l:'Índice de Evolução', v:ieMedio!==null?ieMedio+'':'—', sub:'Crescimento médio', cor:mmCorIM(ieMedio)},
-    {l:'Conversão de Erros', v:tceMedio!==null?tceMedio+'%':'—', sub:'Eficácia do ciclo', cor:mmCorIM(tceMedio)},
-    {l:'Adesão ao Processo', v:adMedio!==null?adMedio+'%':'—', sub:'Regularidade simulados', cor:mmCorIM(adMedio)},
-    {l:'Alunos avaliados', v:com.length+'', sub:`de ${alunos.length} total`, cor:'var(--accent)'},
+    {l:'Índice de Mentoria (IM)', v:imMedio!==null?imMedio+'':'—', sub:mmLabelIM(imMedio), cor:mmCorIM(imMedio), desc:'Média ponderada pela dificuldade de partida'},
+    {l:'Alunos avaliados', v:com.length+'', sub:`${semDados} sem dados suficientes`, cor:'var(--accent)', desc:'2+ simulados'},
+    {l:'IM máximo', v:ims.length?Math.max(...ims)+'':'—', sub:'Melhor evolução', cor:'#1A6B5C', desc:''},
+    {l:'IM mínimo', v:ims.length?Math.min(...ims)+'':'—', sub:'Atenção necessária', cor:mmCorIM(ims.length?Math.min(...ims):null), desc:''},
   ];
   document.getElementById('mm-cards-top').innerHTML = cards.map(c=>`
-    <div class="card" style="text-align:center;padding:16px 12px">
+    <div class="card" style="text-align:center;padding:16px 12px" title="${c.desc}">
       <div style="font-size:28px;font-weight:800;color:${c.cor};font-family:var(--font-display)">${c.v}</div>
       <div style="font-size:12px;font-weight:600;color:var(--text);margin:4px 0">${c.l}</div>
       <div style="font-size:11px;color:var(--muted)">${c.sub}</div>
     </div>`).join('');
 
-  // Gráfico de evolução por área
+  // Gráfico: delta ponderado médio por área
   const areas = ['CN','CH','LCT','MAT'];
   const coresArea = {'CN':'#1A6B5C','CH':'#7D3C00','LCT':'#1A3F6B','MAT':'#8B1A1A'};
-  const evolPorArea = {};
+  const deltaPondPorArea = {};
   areas.forEach(ar=>{
-    const deltas = dados.map(d=>{
-      const ie = mmCalcIEAreas(d.a.simulados||[]);
-      return ie?.[ar]?.delta??null;
-    }).filter(v=>v!==null);
-    evolPorArea[ar] = deltas.length ? Math.round(mmAvg(deltas)) : 0;
+    const vals = dados.map(d=>d.ieA?.[ar]?.deltaPond??null).filter(v=>v!==null);
+    deltaPondPorArea[ar] = vals.length ? Math.round(mmAvg(vals)*10)/10 : 0;
   });
 
   destroyChart('mmEvolucao');
@@ -4306,17 +4269,28 @@ function renderMetricasMentoria(){
     charts['mmEvolucao'] = new Chart(ctx1,{
       type:'bar',
       data:{
-        labels:areas,
-        datasets:[{
-          label:'Delta médio (pp)',
-          data:areas.map(a=>evolPorArea[a]),
-          backgroundColor:areas.map(a=>evolPorArea[a]>=0?coresArea[a]+'CC':'#8B1A1ACC'),
-          borderRadius:6
-        }]
+        labels:['CN','CH','LCT','MAT'],
+        datasets:[
+          {
+            label:'Delta bruto médio (pp)',
+            data: areas.map(ar=>{
+              const vals=dados.map(d=>d.ieA?.[ar]?.delta??null).filter(v=>v!==null);
+              return vals.length?Math.round(mmAvg(vals)):0;
+            }),
+            backgroundColor: areas.map(a=>'#cccccc88'),
+            borderRadius:4,
+          },
+          {
+            label:'Delta ponderado médio',
+            data: areas.map(ar=>deltaPondPorArea[ar]),
+            backgroundColor: areas.map(ar=>deltaPondPorArea[ar]>=0?coresArea[ar]+'CC':'#8B1A1ACC'),
+            borderRadius:4,
+          }
+        ]
       },
       options:{
         responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{display:false}},
+        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
         scales:{
           y:{grid:{color:'var(--border2)'},ticks:{color:'var(--muted)',callback:v=>v+'pp'}},
           x:{grid:{display:false},ticks:{color:'var(--muted)'}}
@@ -4325,23 +4299,24 @@ function renderMetricasMentoria(){
     });
   }
 
-  // Scatter plot
+  // Scatter: patamar inicial vs IM
   destroyChart('mmScatter');
   const ctx2 = document.getElementById('mm-chart-scatter');
   if(ctx2){
-    const pontos = dados.filter(d=>d.ie!==null&&d.adesao!==null).map(d=>({
-      x: d.adesao,
-      y: d.ie,
-      nome: d.a.nome.split(' ')[0],
-      im: d.im
-    }));
+    const pontos = dados.filter(d=>d.im!==null).map(d=>{
+      const sims=d.a.simulados||[];
+      const n=Math.min(2,sims.length);
+      const inicio=sims.slice(0,n);
+      const fns=[{a:mmCnA,q:mmCnQ},{a:mmChA,q:mmChQ},{a:mmLinA,q:mmLinQ},{a:mmMatA,q:mmMatQ}];
+      const pat=mmAvg(fns.map(({a,q})=>mmAvg(inicio.map(s=>mmPct(a(s),q(s))))).filter(v=>v!==null));
+      return {x:Math.round(pat||0), y:d.im, nome:d.a.nome.split(' ').slice(0,2).join(' ')};
+    });
     charts['mmScatter'] = new Chart(ctx2,{
       type:'scatter',
       data:{datasets:[{
         data: pontos,
-        backgroundColor: pontos.map(p=>mmCorIM(p.im)+'CC'),
-        pointRadius: 7,
-        pointHoverRadius: 9
+        backgroundColor: pontos.map(p=>mmCorIM(p.y)+'CC'),
+        pointRadius:7, pointHoverRadius:9
       }]},
       options:{
         responsive:true, maintainAspectRatio:false,
@@ -4349,136 +4324,99 @@ function renderMetricasMentoria(){
           legend:{display:false},
           tooltip:{callbacks:{label:ctx=>{
             const p=ctx.raw;
-            return ` ${p.nome} — Adesão:${p.x} IE:${p.y}`;
+            return ` ${p.nome} — partida: ${p.x}% · IM: ${p.y}`;
           }}}
         },
         scales:{
-          x:{title:{display:true,text:'Adesão ao processo',color:'var(--muted)'},min:0,max:100,
+          x:{title:{display:true,text:'Patamar inicial médio (%)',color:'var(--muted)'},min:0,max:100,
             grid:{color:'var(--border2)'},ticks:{color:'var(--muted)'}},
-          y:{title:{display:true,text:'Índice de Evolução',color:'var(--muted)'},min:0,max:100,
+          y:{title:{display:true,text:'Índice de Mentoria',color:'var(--muted)'},min:0,max:100,
             grid:{color:'var(--border2)'},ticks:{color:'var(--muted)'}}
         }
       }
     });
   }
 
-  // Lista de conversão de erros
-  const top10TCE = [...dados].filter(d=>d.tce!==null)
-    .sort((a,b)=>b.tce-a.tce).slice(0,10);
-  document.getElementById('mm-conversao-lista').innerHTML = top10TCE.length
-    ? top10TCE.map(d=>`<div class="ebar-row" style="margin-bottom:6px">
-        <span class="ebar-name">${d.a.nome.split(' ').slice(0,2).join(' ')}</span>
-        <div class="ebar-track"><div class="ebar-fill" style="width:${d.tce}%;background:${mmCorIM(d.tce)}"></div></div>
-        <span class="ebar-val" style="color:${mmCorIM(d.tce)}">${d.tce}%</span>
-      </div>`).join('')
-    : '<p style="font-size:12px;color:var(--muted)">Sem dados suficientes.</p>';
-
-  // Lista de adesão
-  const top10Ad = [...dados].filter(d=>d.adesao!==null)
-    .sort((a,b)=>b.adesao-a.adesao).slice(0,10);
-  document.getElementById('mm-adesao-lista').innerHTML = top10Ad.length
-    ? top10Ad.map(d=>`<div class="ebar-row" style="margin-bottom:6px">
-        <span class="ebar-name">${d.a.nome.split(' ').slice(0,2).join(' ')}</span>
-        <div class="ebar-track"><div class="ebar-fill" style="width:${d.adesao}%;background:${mmCorIM(d.adesao)}"></div></div>
-        <span class="ebar-val" style="color:${mmCorIM(d.adesao)}">${d.adesao}%</span>
-      </div>`).join('')
-    : '<p style="font-size:12px;color:var(--muted)">Sem dados suficientes.</p>';
+  // Limpar listas de TCE e adesão (não usadas mais)
+  const listaConv = document.getElementById('mm-conversao-lista');
+  const listaAd   = document.getElementById('mm-adesao-lista');
+  if(listaConv) listaConv.closest('.card')?.style.setProperty('display','none');
+  if(listaAd)   listaAd.closest('.card')?.style.setProperty('display','none');
 
   // Ranking IM
   const ranking = [...dados].filter(d=>d.im!==null).sort((a,b)=>b.im-a.im);
   document.getElementById('mm-ranking-im').innerHTML = ranking.length
     ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="border-bottom:1px solid var(--border2)">
-          <th style="padding:6px;text-align:left;color:var(--muted);font-weight:600">#</th>
-          <th style="padding:6px;text-align:left;color:var(--muted);font-weight:600">Aluno</th>
-          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">IM</th>
-          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">IE</th>
-          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">Erros</th>
-          <th style="padding:6px;text-align:center;color:var(--muted);font-weight:600">Adesão</th>
-          <th style="padding:6px;text-align:left;color:var(--muted);font-weight:600">Status</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">#</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">Aluno</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">IM</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Patamar inicial</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Patamar final</th>
+          <th style="padding:6px 8px;text-align:center;color:var(--muted);font-weight:600">Delta bruto</th>
+          <th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:600">Status</th>
         </tr></thead><tbody>
-        ${ranking.map((d,i)=>`<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="selecionarAluno('${d.a.id}')">
-          <td style="padding:6px;color:var(--muted)">${i+1}</td>
-          <td style="padding:6px;font-weight:500">${d.a.nome.split(' ').slice(0,2).join(' ')}</td>
-          <td style="padding:6px;text-align:center;font-weight:700;color:${mmCorIM(d.im)}">${d.im}</td>
-          <td style="padding:6px;text-align:center;color:${mmCorIM(d.ie)}">${d.ie??'—'}</td>
-          <td style="padding:6px;text-align:center;color:${mmCorIM(d.tce)}">${d.tce!==null?d.tce+'%':'—'}</td>
-          <td style="padding:6px;text-align:center;color:${mmCorIM(d.adesao)}">${d.adesao!==null?d.adesao+'%':'—'}</td>
-          <td style="padding:6px;color:${mmCorIM(d.im)}">${mmLabelIM(d.im)}</td>
-        </tr>`).join('')}
+        ${ranking.map((d,i)=>{
+          const sims=d.a.simulados||[];
+          const n=Math.min(2,sims.length);
+          const fns=[{a:mmCnA,q:mmCnQ},{a:mmChA,q:mmChQ},{a:mmLinA,q:mmLinQ},{a:mmMatA,q:mmMatQ}];
+          const pat=v=>mmAvg(fns.map(({a,q})=>mmAvg(v.map(s=>mmPct(a(s),q(s))))).filter(x=>x!==null));
+          const pi=Math.round(pat(sims.slice(0,n))||0);
+          const pf=Math.round(pat(sims.slice(-n))||0);
+          const delta=pf-pi;
+          const dCor=delta>0?'#1A6B5C':delta<0?'#8B1A1A':'var(--muted)';
+          return `<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="selecionarAluno('${d.a.id}')">
+            <td style="padding:6px 8px;color:var(--muted)">${i+1}</td>
+            <td style="padding:6px 8px;font-weight:500">${d.a.nome.split(' ').slice(0,2).join(' ')}</td>
+            <td style="padding:6px 8px;text-align:center;font-weight:700;color:${mmCorIM(d.im)}">${d.im}</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pi}%</td>
+            <td style="padding:6px 8px;text-align:center;color:var(--muted)">${pf}%</td>
+            <td style="padding:6px 8px;text-align:center;font-weight:600;color:${dCor}">${delta>0?'+':''}${delta}pp</td>
+            <td style="padding:6px 8px;color:${mmCorIM(d.im)}">${mmLabelIM(d.im)}</td>
+          </tr>`;
+        }).join('')}
       </tbody></table>`
     : '<p style="font-size:12px;color:var(--muted)">Sem dados suficientes.</p>';
 }
 
 // ── Renderização individual ───────────────────────────────────
 function renderMetricasAluno(a){
-  const sims    = a.simulados||[];
-  const ie      = mmCalcIE(sims);
-  const tce     = mmCalcTCE(a);
-  const adesao  = mmCalcAdesao(a);
-  const im      = mmCalcIM(ie,tce,adesao);
-  const ieAreas = mmCalcIEAreas(sims);
+  const sims   = a.simulados||[];
+  const ie     = mmCalcIE(sims);
+  const im     = mmCalcIM(ie);
+  const ieAreas= mmCalcIEAreas(sims);
 
   // Badge IM
   const badge = document.getElementById('aluno-im-badge');
   if(badge){
-    badge.textContent = im!==null ? `IM ${im}` : '—';
+    badge.textContent = im!==null ? `IM ${im}` : sims.length<2?'IM —':'IM —';
     badge.style.color = mmCorIM(im);
     badge.title = mmLabelIM(im);
   }
 
-  // Cards individuais
-  const cards = [
-    {l:'Índice de Mentoria', v:im!==null?im+'':'—', cor:mmCorIM(im), sub:mmLabelIM(im)},
-    {l:'Índice de Evolução', v:ie!==null?ie+'':'—', cor:mmCorIM(ie), sub:'Crescimento geral'},
-    {l:'Conversão de Erros', v:tce!==null?tce+'%':'—', cor:mmCorIM(tce), sub:'Eficácia do ciclo'},
-    {l:'Adesão ao processo', v:adesao!==null?adesao+'%':'—', cor:mmCorIM(adesao), sub:'Regularidade'},
-  ];
+  // Cards por área
   const cardsEl = document.getElementById('aluno-mm-cards');
-  if(cardsEl) cardsEl.innerHTML = cards.map(c=>`
-    <div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
-      <div style="font-size:22px;font-weight:800;color:${c.cor};font-family:var(--font-display)">${c.v}</div>
-      <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${c.l}</div>
-      <div style="font-size:10px;color:var(--muted)">${c.sub}</div>
-    </div>`).join('');
-
-  // Gráfico de evolução por área
-  if(!ieAreas||!sims.length){ return; }
-  const areas  = ['CN','CH','LCT','MAT'];
-  const cores  = ['#1A6B5C','#7D3C00','#1A3F6B','#8B1A1A'];
-  const labels = sims.map((_,i)=>`Sim ${i+1}`);
-  const fns    = [
-    {a:mmCnA, q:mmCnQ},{a:mmChA, q:mmChQ},
-    {a:mmLinA,q:mmLinQ},{a:mmMatA,q:mmMatQ}
-  ];
-
-  destroyChart('alunoMMEvol');
-  const ctx = document.getElementById('chart-aluno-mm-evol');
-  if(ctx){
-    charts['alunoMMEvol'] = new Chart(ctx,{
-      type:'line',
-      data:{
-        labels,
-        datasets: areas.map((ar,i)=>({
-          label:ar,
-          data: sims.map(s=>mmPct(fns[i].a(s),fns[i].q(s))),
-          borderColor: cores[i],
-          backgroundColor: cores[i]+'22',
-          tension:0.3,
-          pointRadius:3,
-          borderWidth:2,
-          spanGaps:true
-        }))
-      },
-      options:{
-        responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
-        scales:{
-          y:{min:0,max:100,grid:{color:'var(--border2)'},ticks:{color:'var(--muted)',callback:v=>v+'%'}},
-          x:{grid:{display:false},ticks:{color:'var(--muted)',maxTicksLimit:8}}
-        }
-      }
-    });
+  if(cardsEl && ieAreas){
+    const areas = [{k:'CN',l:'Natureza',c:'#1A6B5C'},{k:'CH',l:'Humanas',c:'#7D3C00'},{k:'LCT',l:'Linguagens',c:'#1A3F6B'},{k:'MAT',l:'Matemática',c:'#8B1A1A'}];
+    cardsEl.innerHTML = areas.map(({k,l,c})=>{
+      const d=ieAreas[k];
+      if(!d||d.ini===null) return `<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:var(--muted)">—</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:3px 0">${l}</div>
+        <div style="font-size:10px;color:var(--muted)">Sem dados</div>
+      </div>`;
+      const dCor=d.delta>0?'#1A6B5C':d.delta<0?'#8B1A1A':'var(--muted)';
+      return `<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:${dCor}">${d.delta>0?'+':''}${d.delta??'—'}pp</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${Math.round(d.ini??0)}% → ${Math.round(d.fim??0)}%</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);margin:2px 0">${l}</div>
+        <div style="font-size:10px;color:${c}">fator ${d.fator}×</div>
+      </div>`;
+    }).join('');
+  } else if(cardsEl){
+    cardsEl.innerHTML = sims.length<2
+      ? '<p style="font-size:12px;color:var(--muted);grid-column:1/-1">Necessário pelo menos 2 simulados para calcular o índice.</p>'
+      : '';
   }
 }
 
