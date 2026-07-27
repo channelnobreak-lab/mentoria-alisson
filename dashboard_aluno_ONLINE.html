@@ -1932,25 +1932,38 @@ function renderCronoDias(){
     itens.forEach(item=>{ const ti=item.turnoIdx??0; if(porTurno[ti]!==undefined) porTurno[ti].push(item); else porTurno[0].push(item); });
     if(itens.length>0) console.log('dia',data,'itens='+itens.length,'diaObj.turnos='+JSON.stringify(diaObj.turnos?.map(t=>t.tipo)),'porTurno0='+porTurno[0].length);
 
-    const turnoIcons=['🌅 Manhã','☀️ Tarde','🌙 Noite'];
-    const turnosCols = diaObj.turnos ? diaObj.turnos.map((t,ti)=>{
-      const itsTurno = porTurno[ti]||[];
-      if(t.tipo==='folga' && !itsTurno.length) return `<div style="padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><span>${turnoIcons[ti]}</span><span>Folga</span></div>`;
-      if(t.tipo==='aula' && !itsTurno.length) return `<div style="padding:8px 12px;background:#EEF2FF;border-radius:8px;margin-bottom:6px;font-size:12px;color:#1A3F6B;display:flex;align-items:center;gap:8px;border:1px solid #C7D2FE"><span>${turnoIcons[ti]}</span><span>🏫 Aula — bloqueado</span></div>`;
-      if(!itsTurno.length) return '';
-      return `<div style="margin-bottom:8px">
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:4px 0;border-bottom:1px solid var(--border)">${turnoIcons[ti]}</div>
-        ${itsTurno.map(item=>renderCronoCard(item)).join('')}
-      </div>`;
-    }).join('') : itens.map(item=>renderCronoCard(item)).join('');
-
-    // Verificação explícita: tem conteúdo renderizado?
-    const temConteudo = itens.length > 0 || turnosCols.trim().length > 0;
-    const conteudoHtml = temConteudo && turnosCols.trim()
-      ? turnosCols
-      : itens.length > 0
-        ? itens.map(item=>renderCronoCard(item)).join('')
-        : `<div style="padding:10px 16px;color:var(--muted);font-size:12px;font-style:italic">Sem conteúdos alocados</div>`;
+    // Renderizar itens — sempre mostra se há itens, independente de turnos
+    let conteudoHtml;
+    if(itens.length === 0){
+      // Verificar se é dia de folga ou aula
+      const todosFolga = diaObj.turnos && diaObj.turnos.every(t=>t.tipo==='folga'||t.tipo==='aula');
+      if(todosFolga){
+        conteudoHtml = diaObj.turnos.map((t,ti)=>{
+          if(t.tipo==='folga') return `<div style="padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><span>${turnoIcons[ti]}</span><span>Folga</span></div>`;
+          if(t.tipo==='aula') return `<div style="padding:8px 12px;background:#EEF2FF;border-radius:8px;margin-bottom:6px;font-size:12px;color:#1A3F6B;display:flex;align-items:center;gap:8px;border:1px solid #C7D2FE"><span>${turnoIcons[ti]}</span><span>🏫 Aula — bloqueado</span></div>`;
+          return '';
+        }).join('');
+      } else {
+        conteudoHtml = `<div style="padding:10px 16px;color:var(--muted);font-size:12px;font-style:italic">Sem conteúdos alocados</div>`;
+      }
+    } else if(diaObj.turnos){
+      // Com turnos definidos — agrupar por turno
+      const cols = diaObj.turnos.map((t,ti)=>{
+        const its = porTurno[ti]||[];
+        if(t.tipo==='folga') return `<div style="padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:6px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px"><span>${turnoIcons[ti]}</span><span>Folga</span></div>`;
+        if(t.tipo==='aula') return `<div style="padding:8px 12px;background:#EEF2FF;border-radius:8px;margin-bottom:6px;font-size:12px;color:#1A3F6B;display:flex;align-items:center;gap:8px;border:1px solid #C7D2FE"><span>${turnoIcons[ti]}</span><span>🏫 Aula — bloqueado</span></div>`;
+        if(!its.length) return '';
+        return `<div style="margin-bottom:8px">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;padding:4px 0;border-bottom:1px solid var(--border)">${turnoIcons[ti]}</div>
+          ${its.map(item=>renderCronoCard(item)).join('')}
+        </div>`;
+      }).join('');
+      // Se cols ficou vazio mas há itens (turnoIdx não bate), renderiza sem agrupar
+      conteudoHtml = cols.trim() ? cols : itens.map(item=>renderCronoCard(item)).join('');
+    } else {
+      // Sem turnos — renderiza direto
+      conteudoHtml = itens.map(item=>renderCronoCard(item)).join('');
+    }
 
     const labelDia = dow+', '+(dataFmt.split(',')[1]?.trim()||data);
     return `<div class="crono-dia-block">
