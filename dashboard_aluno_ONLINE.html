@@ -1935,13 +1935,21 @@ function renderCronoDias(){
       </div>`;
     }).join('') : itens.map(item=>renderCronoCard(item)).join('');
 
+    // Verificação explícita: tem conteúdo renderizado?
+    const temConteudo = itens.length > 0 || turnosCols.trim().length > 0;
+    const conteudoHtml = temConteudo && turnosCols.trim()
+      ? turnosCols
+      : itens.length > 0
+        ? itens.map(item=>renderCronoCard(item)).join('')
+        : `<div style="padding:10px 16px;color:var(--muted);font-size:12px;font-style:italic">Sem conteúdos alocados</div>`;
+
     const labelDia = dow+', '+(dataFmt.split(',')[1]?.trim()||data);
     return `<div class="crono-dia-block">
       <div class="crono-dia-header" style="background:${headerCor};border-left:3px solid ${headerBorder}">
         <span class="crono-dia-label">${labelDia}</span>
         <span style="font-size:11px;color:var(--teal)">📚 Dia de estudo</span>
       </div>
-      ${turnosCols||`<div style="padding:10px 16px;color:var(--muted);font-size:12px;font-style:italic">Sem conteúdos alocados</div>`}
+      ${conteudoHtml}
     </div>`;
   }).join('');
 }
