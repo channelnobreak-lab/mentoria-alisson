@@ -782,7 +782,7 @@ tr:hover td{background:var(--bg);}
   <div class="card">
     <div class="section-header" style="margin-bottom:14px">
       <div class="card-title" style="margin-bottom:0">Minha rotina — próximos 15 dias</div>
-      <button class="btn-sm" onclick="if(confirm('Reiniciar cronograma? Os conteúdos pendentes serão removidos, mas o seu histórico de conteúdos concluídos será preservado.')){cronograma=cronograma.filter(x=>x.tipo==='historico'||x.concluido);cronoIniciarQuinzena();salvarCrono();renderCronoQuinzena();document.getElementById('crono-resultado').style.display='none';}">↺ Reiniciar</button>
+      <button class="btn-sm" onclick="if(confirm('Reiniciar cronograma? Os conteúdos pendentes serão removidos, mas o seu histórico de conteúdos dominados será preservado.')){cronograma=cronograma.filter(x=>x.tipo==='historico');cronoIniciarQuinzena();salvarCrono();renderCronoQuinzena();document.getElementById('crono-resultado').style.display='none';}">↺ Reiniciar</button>
     </div>
     <div id="crono-quinzena-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px"></div>
 
