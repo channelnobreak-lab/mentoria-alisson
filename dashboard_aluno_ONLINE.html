@@ -1440,7 +1440,7 @@ function adicionarConteudoManual(){
 }
 
 function renderCronograma(){
-  console.log('renderCronograma: quinzenaDias='+quinzenaDias.length+' cronograma='+cronograma.length);
+  console.log('renderCronograma: quinzenaDias='+quinzenaDias.length+' cronograma='+cronograma.length+' erros='+erros.length);
   // Só inicializar quinzena se realmente não há dados (nem do banco nem locais)
   if(!quinzenaDias.length && !cronograma.length) cronoIniciarQuinzena();
   renderCronoQuinzena();
@@ -2522,17 +2522,40 @@ async function carregarCrono(){
         .select('quinzena_dias,cronograma,data_inicio')
         .eq('aluno_id', supaAlunoId).single();
       console.log('Resultado cronograma:', data, error);
-      if(data){
+      if(data && data.cronograma && data.cronograma.length){
         quinzenaDias = data.quinzena_dias||[];
         cronograma = data.cronograma||[];
         cronoDataInicio = data.data_inicio||null;
+        return;
+      }
+      // Banco vazio ou null — tentar localStorage e sincronizar
+      const saved = _getItem('crono_'+config.nome);
+      if(saved){
+        const d = JSON.parse(saved);
+        quinzenaDias = d.quinzenaDias||[];
+        cronograma = d.cronograma||[];
+        cronoDataInicio = d.cronoDataInicio||null;
+        // Sincronizar localStorage → banco imediatamente
+        if(cronograma.length){
+          console.log('Sincronizando cronograma do localStorage para o banco...');
+          supa.from('cronogramas').upsert({
+            aluno_id: supaAlunoId,
+            quinzena_dias: quinzenaDias,
+            cronograma: cronograma,
+            data_inicio: cronoDataInicio,
+            atualizado_em: new Date().toISOString()
+          }, {onConflict:'aluno_id'}).then(({error})=>{
+            if(error) console.warn('Erro ao sincronizar cronograma:', error.message);
+            else console.log('Cronograma sincronizado com banco com sucesso.');
+          });
+        }
         return;
       }
     }catch(e){ console.warn('Erro carregarCrono:', e); }
   } else {
     console.log('carregarCrono: supaMode='+supaMode+' supaAlunoId='+supaAlunoId);
   }
-  // Fallback: localStorage
+  // Fallback: localStorage apenas
   try{
     const saved=_getItem('crono_'+config.nome);
     if(saved){const d=JSON.parse(saved);quinzenaDias=d.quinzenaDias||[];cronograma=d.cronograma||[];cronoDataInicio=d.cronoDataInicio||null;}
