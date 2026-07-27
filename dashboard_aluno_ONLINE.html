@@ -1463,11 +1463,18 @@ function cronoNormalizarDias(){
 }
 function cronoIniciarQuinzena(){
   const hoje = new Date();
-  cronoDataInicio = hoje.toISOString().slice(0,10);
+  // Usar data local (não UTC) para evitar problema de fuso horário
+  const dataLocal = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const dia = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dia}`;
+  };
+  cronoDataInicio = dataLocal(hoje);
   quinzenaDias = [];
   for(let i=0;i<15;i++){
     const d = new Date(hoje); d.setDate(hoje.getDate()+i);
-    quinzenaDias.push({data:d.toISOString().slice(0,10), tipo:'estudo', turnos:_turnosPadrao('estudo')});
+    quinzenaDias.push({data:dataLocal(d), tipo:'estudo', turnos:_turnosPadrao('estudo')});
   }
 }
 
@@ -4200,7 +4207,8 @@ function renderCalendarioLista(){
   const lista = document.getElementById('cal-lista');
   if(!calendarioProvas.length){if(wrapper)wrapper.style.display='none';return;}
   if(wrapper)wrapper.style.display='block';
-  const hoje = new Date().toISOString().slice(0,10);
+  const _hj = new Date();
+  const hoje = `${_hj.getFullYear()}-${String(_hj.getMonth()+1).padStart(2,'0')}-${String(_hj.getDate()).padStart(2,'0')}`;
   const CORES_VEST = {
     'ENEM':'#8B1A1A','Fuvest':'#1A3F6B','Unicamp':'#1A6B5C','UERJ':'#7D3C00',
     'UNESP':'#534AB7','UFU':'#117A65','UFMG':'#4A235A','UnB':'#B8860B','ITA':'#1A5276','IME':'#6D4C41'
