@@ -1930,6 +1930,7 @@ function renderCronoDias(){
     // Agrupar itens por turno
     const porTurno={0:[],1:[],2:[]};
     itens.forEach(item=>{ const ti=item.turnoIdx??0; if(porTurno[ti]!==undefined) porTurno[ti].push(item); else porTurno[0].push(item); });
+    if(itens.length>0) console.log('dia',data,'itens='+itens.length,'diaObj.turnos='+JSON.stringify(diaObj.turnos?.map(t=>t.tipo)),'porTurno0='+porTurno[0].length);
 
     const turnoIcons=['🌅 Manhã','☀️ Tarde','🌙 Noite'];
     const turnosCols = diaObj.turnos ? diaObj.turnos.map((t,ti)=>{
