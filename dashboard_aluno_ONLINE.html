@@ -1933,6 +1933,7 @@ function renderCronoDias(){
     if(itens.length>0) console.log('dia',data,'itens='+itens.length,'diaObj.turnos='+JSON.stringify(diaObj.turnos?.map(t=>t.tipo)),'porTurno0='+porTurno[0].length);
 
     // Renderizar itens — sempre mostra se há itens, independente de turnos
+    const turnoIcons=['🌅 Manhã','☀️ Tarde','🌙 Noite'];
     let conteudoHtml;
     if(itens.length === 0){
       // Verificar se é dia de folga ou aula
