@@ -1893,8 +1893,9 @@ async function cronoBaixarPDF(){
 function renderCronoDias(){
   const container=document.getElementById('crono-dias-container');
   if(!cronograma.length){container.innerHTML='<p style="color:var(--muted);font-size:13px">Clique em "Gerar cronograma" para distribuir os conteúdos.</p>';return;}
-  // Histórico = concluídos removidos da fila (não exibir, mas contar)
   const ativos=cronograma.filter(x=>x.tipo!=='historico');
+  console.log('renderCronoDias: ativos='+ativos.length);
+  if(ativos.length>0) console.log('primeiro item:', JSON.stringify(ativos[0]));
   const total=ativos.filter(x=>x.tipo!=='simulado'&&x.tipo!=='redacao').length;
   const concluidosAtivos=ativos.filter(x=>x.concluido&&x.tipo!=='simulado'&&x.tipo!=='redacao').length;
   const concluidosHistorico=cronograma.filter(x=>x.tipo==='historico'&&x.concluido).length;
