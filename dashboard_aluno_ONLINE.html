@@ -2543,60 +2543,50 @@ async function carregarCrono(){
         cronoDataInicio = data.data_inicio||null;
         return;
       }
-      // Banco vazio — tentar localStorage e sincronizar
+      // Banco vazio — tentar localStorage
       const saved = _getItem('crono_'+config.nome);
       if(saved){
         const d = JSON.parse(saved);
         const qdLocal = d.quinzenaDias||[];
         const cronoLocal = d.cronograma||[];
-        // Validar se a quinzena ainda é relevante (última data dentro de 30 dias)
-        const hoje = new Date();
-        const datasValidas = qdLocal.filter(dia=>{
-          const dataDia = new Date(dia.data+'T12:00:00');
-          const diffDias = (dataDia - hoje) / (1000*60*60*24);
-          return diffDias > -30; // até 30 dias no passado
-        });
-        if(datasValidas.length > 0){
+        // Verificar se há itens ativos com datas dentro da quinzena salva
+        const datasQuinzena = new Set(qdLocal.map(x=>x.data));
+        const ativos = cronoLocal.filter(x=>x.tipo!=='historico');
+        const temItemValido = ativos.some(x=>datasQuinzena.has(x.sessaoData));
+        if(temItemValido || (ativos.length === 0 && cronoLocal.length > 0)){
           quinzenaDias = qdLocal;
           cronograma = cronoLocal;
           cronoDataInicio = d.cronoDataInicio||null;
-          // Sincronizar para o banco imediatamente
-          if(cronograma.length){
-            console.log('Sincronizando cronograma do localStorage → banco...');
-            supa.from('cronogramas').upsert({
-              aluno_id: supaAlunoId,
-              quinzena_dias: quinzenaDias,
-              cronograma: cronograma,
-              data_inicio: cronoDataInicio,
-              atualizado_em: new Date().toISOString()
-            }, {onConflict:'aluno_id'}).then(({error})=>{
-              if(error) console.warn('Erro ao sincronizar:', error.message);
-              else console.log('Cronograma sincronizado com banco.');
-            });
-          }
+          // Sincronizar para o banco
+          supa.from('cronogramas').upsert({
+            aluno_id: supaAlunoId,
+            quinzena_dias: quinzenaDias,
+            cronograma: cronograma,
+            data_inicio: cronoDataInicio,
+            atualizado_em: new Date().toISOString()
+          }, {onConflict:'aluno_id'}).then(({error})=>{
+            if(error) console.warn('Erro ao sincronizar:', error.message);
+            else console.log('Cronograma sincronizado com banco.');
+          });
           return;
         } else {
-          console.log('Quinzena do localStorage muito antiga — descartando.');
+          console.log('Cronograma do localStorage inválido (itens fora da quinzena) — descartando.');
         }
       }
     }catch(e){ console.warn('Erro carregarCrono:', e); }
   } else {
     console.log('carregarCrono: supaMode='+supaMode+' supaAlunoId='+supaAlunoId);
-    // Offline: localStorage com validação de data
     try{
       const saved=_getItem('crono_'+config.nome);
       if(saved){
         const d=JSON.parse(saved);
-        const qdLocal = d.quinzenaDias||[];
-        const hoje = new Date();
-        const datasValidas = qdLocal.filter(dia=>{
-          const dataDia = new Date(dia.data+'T12:00:00');
-          return (dataDia - hoje) / (1000*60*60*24) > -30;
-        });
-        if(datasValidas.length > 0){
-          quinzenaDias=qdLocal;
-          cronograma=d.cronograma||[];
-          cronoDataInicio=d.cronoDataInicio||null;
+        const qdLocal=d.quinzenaDias||[];
+        const cronoLocal=d.cronograma||[];
+        const datasQuinzena=new Set(qdLocal.map(x=>x.data));
+        const ativos=cronoLocal.filter(x=>x.tipo!=='historico');
+        const temItemValido=ativos.some(x=>datasQuinzena.has(x.sessaoData));
+        if(temItemValido || (ativos.length===0 && cronoLocal.length>0)){
+          quinzenaDias=qdLocal; cronograma=cronoLocal; cronoDataInicio=d.cronoDataInicio||null;
         }
       }
     }catch(e){}
