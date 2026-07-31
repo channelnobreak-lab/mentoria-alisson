@@ -782,7 +782,16 @@ tr:hover td{background:var(--bg);}
   <div class="card">
     <div class="section-header" style="margin-bottom:14px">
       <div class="card-title" style="margin-bottom:0">Minha rotina — próximos 15 dias</div>
-      <button class="btn-sm" onclick="if(confirm('Reiniciar cronograma? Os conteúdos pendentes serão removidos, mas o seu histórico de conteúdos dominados será preservado.')){cronograma=cronograma.filter(x=>x.tipo==='historico');cronoIniciarQuinzena();salvarCrono();renderCronoQuinzena();document.getElementById('crono-resultado').style.display='none';}">↺ Reiniciar</button>
+      <button class="btn-sm" onclick="if(confirm('Reiniciar cronograma? Os conteúdos pendentes serão removidos, mas o seu histórico de conteúdos estudados será preservado.')){
+        const historico = cronograma
+          .filter(x=>x.tipo==='historico'||(x.concluido===true))
+          .map(x=>({...x, sessaoData:null, turnoIdx:null, diaIdx:null}));
+        cronograma=historico;
+        cronoIniciarQuinzena();
+        salvarCrono();
+        renderCronoQuinzena();
+        document.getElementById('crono-resultado').style.display='none';
+      }">↺ Reiniciar</button>
     </div>
     <div id="crono-quinzena-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px"></div>
 
@@ -1432,7 +1441,7 @@ function adicionarConteudoManual(){
     concluido:false,exQtd:0,exAcertos:0,
     revConcluido:false,revExQtd:0,revExAcertos:0
   });
-  cronograma.sort((a,b)=>a.sessaoData.localeCompare(b.sessaoData));
+  cronograma.sort((a,b)=>(a.sessaoData||'').localeCompare(b.sessaoData||''));
   document.getElementById('crono-resultado').style.display='block';
   closeModal('modal-conteudo-manual');
   salvarCrono();
@@ -1739,7 +1748,7 @@ function cronoGerarCronograma(){
     });
   });
 
-  novosCronograma.sort((a,b)=>a.sessaoData.localeCompare(b.sessaoData));
+  novosCronograma.sort((a,b)=>(a.sessaoData||'').localeCompare(b.sessaoData||''));
 
   // Preservar status e estatísticas de conclusão — inclusive conteúdos que saíram da fila
   novosCronograma.forEach(item=>{
