@@ -107,7 +107,8 @@ async function carregarDadosAluno(user){
     objetivo: alunoData.objetivo||'',
     metas: alunoData.metas||{cn:39,ch:40,lin:36,mat:41},
     enemHistorico: alunoData.enemy_historico||[],
-    areasBloqueadas: alunoData.areas_bloqueadas||[]
+    areasBloqueadas: alunoData.areas_bloqueadas||[],
+    materiasBloqueadas: alunoData.materias_bloqueadas||[]
   };
 
   simulados = (alunoData.simulados||[])
@@ -145,6 +146,7 @@ async function carregarDadosAluno(user){
   initErrosSelects();
   buildSimSelect('err-simulado');
   await carregarCrono();
+  carregarMateriasBloqueadas();
 
   // Carregar outras provas do banco (prioritário sobre localStorage)
   if(alunoData.outras_provas?.length){
@@ -800,10 +802,29 @@ tr:hover td{background:var(--bg);}
       <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--muted)">Clique em cada dia para configurar os turnos (manhã, tarde, noite).</span></div>
       <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="abrirModalConteudoManual()">✏ Adicionar manualmente</button>
+        <button class="btn btn-secondary" onclick="abrirModalMateriasBloqueio()">🚫 Matérias</button>
         <button class="btn btn-primary" onclick="cronoGerarCronograma()">⚡ Gerar automaticamente</button>
       </div>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px">Clique em cada dia para definir o tipo. Você pode gerar automaticamente com base nos erros ou adicionar conteúdos manualmente.</div>
+  </div>
+
+  <!-- MODAL: MATÉRIAS BLOQUEADAS -->
+  <div id="modal-materias-bloqueio" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--surface);border-radius:16px;padding:24px;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.25);max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <div style="font-size:16px;font-weight:700">🚫 Matérias no cronograma</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Desmarque as matérias que não quer no cronograma</div>
+        </div>
+        <button onclick="document.getElementById('modal-materias-bloqueio').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+      </div>
+      <div id="modal-materias-lista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-materias-bloqueio').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarMateriasBloqueio()">💾 Salvar</button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL: CONFIGURAR TURNOS DO DIA -->
@@ -1640,8 +1661,9 @@ function cronoGerarCronograma(){
   const totalErros=erros.length;
   const countM={};erros.forEach(e=>countM[e.materia]=(countM[e.materia]||0)+1);
 
-  // Áreas bloqueadas pelo professor
+  // Áreas bloqueadas pelo professor E matérias bloqueadas pelo aluno
   const areasBloqueadas = config.areasBloqueadas || [];
+  const materiasBloqueadas = getMateriasBloqueadas();
   const AREA_SIGLA = {'CN':'CN','CH':'CH','LCT':'LCT','MAT':'MAT'};
 
   // Conteúdos já concluídos com bom aproveitamento — não reentram na fila
@@ -1669,6 +1691,7 @@ function cronoGerarCronograma(){
   const fila = Object.values(conteudoMap).filter(item=>{
     const area = MAT_AREA_CRONO[item.materia]||'CN';
     if(areasBloqueadas.includes(area)) return false;
+    if(materiasBloqueadas.includes(item.materia)) return false;
     // Excluir conteúdos já dominados
     const k = item.materia+'||'+item.modulo+'||'+item.conteudo;
     if(dominados.has(k)) return false;
@@ -2536,6 +2559,65 @@ function cronoPuxarProximo(idxAtual){
 const _store = {};
 function _setItem(k,v){try{localStorage.setItem(k,v);}catch(e){_store[k]=v;}}
 function _getItem(k){try{return localStorage.getItem(k);}catch(e){return _store[k]||null;}}
+
+// ── Bloqueio de matérias pelo aluno ──────────────────────────
+function getMateriasBloqueadas(){
+  return config.materiasBloqueadas || [];
+}
+
+function abrirModalMateriasBloqueio(){
+  const materiasComErro = [...new Set(erros.map(e=>e.materia))].filter(Boolean).sort();
+  const bloqueadas = getMateriasBloqueadas();
+  const lista = document.getElementById('modal-materias-lista');
+  if(!materiasComErro.length){
+    lista.innerHTML='<p style="font-size:13px;color:var(--muted)">Nenhuma matéria com erros registrados ainda.</p>';
+  } else {
+    lista.innerHTML = materiasComErro.map(m=>{
+      const checked = !bloqueadas.includes(m);
+      const area = MAT_AREA_CRONO[m]||'CN';
+      const areaCor = {CN:'#1A6B5C',CH:'#7D3C00',MAT:'#8B1A1A',LCT:'#1A3F6B'}[area]||'var(--muted)';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;cursor:pointer;user-select:none">
+        <input type="checkbox" value="${m}" ${checked?'checked':''} style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer">
+        <span style="flex:1;font-size:13px;font-weight:500">${m}</span>
+        <span style="font-size:10px;font-weight:700;color:${areaCor};background:${areaCor}22;padding:2px 8px;border-radius:10px">${area}</span>
+      </label>`;
+    }).join('');
+  }
+  document.getElementById('modal-materias-bloqueio').style.display='flex';
+}
+
+function salvarMateriasBloqueio(){
+  const checkboxes = document.querySelectorAll('#modal-materias-lista input[type=checkbox]');
+  const bloqueadas = [];
+  checkboxes.forEach(cb=>{ if(!cb.checked) bloqueadas.push(cb.value); });
+  config.materiasBloqueadas = bloqueadas;
+  // Salvar no banco
+  if(supaMode && supaAlunoId){
+    supa.from('alunos')
+      .update({materias_bloqueadas: bloqueadas})
+      .eq('id', supaAlunoId)
+      .then(({error})=>{ if(error) console.warn('Erro ao salvar matérias bloqueadas:', error.message); });
+  }
+  try{ _setItem('matbloq_'+config.nome, JSON.stringify(bloqueadas)); }catch(e){}
+  document.getElementById('modal-materias-bloqueio').style.display='none';
+  atualizarBotaoMaterias();
+}
+
+function atualizarBotaoMaterias(){
+  const n = getMateriasBloqueadas().length;
+  const btn = document.querySelector('button[onclick="abrirModalMateriasBloqueio()"]');
+  if(btn) btn.textContent = n > 0 ? `🚫 Matérias (${n} bloqueada${n>1?'s':''})` : '🚫 Matérias';
+}
+
+function carregarMateriasBloqueadas(){
+  if(!config.materiasBloqueadas){
+    try{
+      const s = _getItem('matbloq_'+config.nome);
+      if(s) config.materiasBloqueadas = JSON.parse(s);
+    }catch(e){}
+  }
+  atualizarBotaoMaterias();
+}
 
 function salvarCrono(){
   // Salvar localmente
