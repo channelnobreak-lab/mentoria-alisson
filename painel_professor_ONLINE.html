@@ -884,20 +884,6 @@ tr:hover td{background:var(--bg);}
 
       <!-- EXPORTAR -->
       <div id="exportar-aluno" class="painel-section">
-        <!-- Bloqueio de áreas do cronograma -->
-        <div class="card">
-          <div class="card-title">🚫 Bloqueio de áreas no cronograma</div>
-          <p style="font-size:13px;color:var(--muted);margin-bottom:14px">As áreas bloqueadas são ignoradas pelo algoritmo ao gerar o cronograma do aluno.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="areas-bloqueio-btns">
-            <button id="blq-CN" onclick="toggleAreaBloqueio('CN')" class="btn-blq">🔬 CN</button>
-            <button id="blq-CH" onclick="toggleAreaBloqueio('CH')" class="btn-blq">📜 CH</button>
-            <button id="blq-MAT" onclick="toggleAreaBloqueio('MAT')" class="btn-blq">📐 MAT</button>
-            <button id="blq-LCT" onclick="toggleAreaBloqueio('LCT')" class="btn-blq">📝 LC</button>
-          </div>
-          <button class="btn btn-primary" onclick="salvarAreasBloqueio()" style="width:100%">💾 Salvar bloqueios</button>
-          <div id="blq-status" style="font-size:12px;color:var(--muted);margin-top:8px;text-align:center"></div>
-        </div>
-
         <!-- Observações do aluno -->
         <!-- Botão ver dashboard do aluno -->
         <div class="card">
