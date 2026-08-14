@@ -751,7 +751,12 @@ tr:hover td{background:var(--bg);}
         <div style="font-family:var(--font-display);font-size:15px;font-weight:600">Plano de estudos — próxima quinzena</div>
         <span style="font-size:11px;background:var(--accent);color:white;padding:2px 10px;border-radius:20px">IA</span>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">15 conteúdos priorizados por: frequência de erro (35%) · pré-requisito para outros conteúdos (45%) · recorrência no ENEM (20%)</p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">25 conteúdos priorizados por: frequência de erro (35%) · pré-requisito para outros conteúdos (45%) · recorrência no ENEM (20%)</p>
+      <div style="margin-bottom:12px">
+        <select id="filtro-sugestao-materia" onchange="renderSugestaoFiltrada()" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);width:100%;max-width:260px">
+          <option value="">Todas as matérias</option>
+        </select>
+      </div>
       <div id="sugestao-conteudos"></div>
     </div>
     <!-- stat grid -->
@@ -801,7 +806,7 @@ tr:hover td{background:var(--bg);}
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--muted)">Clique em cada dia para configurar os turnos (manhã, tarde, noite).</span></div>
       <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
-        <button class="btn btn-secondary" onclick="abrirModalConteudoManual()">✏ Adicionar manualmente</button>
+        <button class="btn btn-secondary" onclick="abrirModalConteudoManual()">📝 Registrar estudo avulso</button>
         <button class="btn btn-secondary" onclick="abrirModalMateriasBloqueio()">🚫 Matérias</button>
         <button class="btn btn-primary" onclick="cronoGerarCronograma()">⚡ Gerar automaticamente</button>
       </div>
@@ -861,12 +866,8 @@ tr:hover td{background:var(--bg);}
 <!-- MODAL ADIÇÃO MANUAL DE CONTEÚDO -->
 <div class="modal-overlay" id="modal-conteudo-manual">
   <div class="modal" style="max-width:520px">
-    <div class="modal-title">✏ Adicionar conteúdo manualmente</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Escolha o dia, matéria e conteúdo para adicionar ao cronograma.</p>
-    <div class="form-row">
-      <label class="form-label">Dia</label>
-      <select class="form-select" id="manual-dia"></select>
-    </div>
+    <div class="modal-title">📝 Registrar estudo avulso</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Registre um conteúdo que você estudou fora do cronograma. Ele será contabilizado no histórico e não voltará para a fila.</p>
     <div class="form-row">
       <label class="form-label">Matéria</label>
       <select class="form-select" id="manual-materia" onchange="onManualMateriaChange()">
@@ -885,13 +886,23 @@ tr:hover td{background:var(--bg);}
         <option value="">— selecione o módulo —</option>
       </select>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-row">
+        <label class="form-label">Exercícios feitos</label>
+        <input class="form-input" id="manual-exqtd" type="number" min="0" placeholder="0">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Acertos</label>
+        <input class="form-input" id="manual-exacertos" type="number" min="0" placeholder="0">
+      </div>
+    </div>
     <div class="form-row">
       <label class="form-label">Observação (opcional)</label>
       <input class="form-input" id="manual-obs" type="text" placeholder="Ex: Focar em exercícios de pH">
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modal-conteudo-manual')">Cancelar</button>
-      <button class="btn btn-primary" onclick="adicionarConteudoManual()">Adicionar</button>
+      <button class="btn btn-primary" onclick="adicionarConteudoManual()">✅ Registrar como concluído</button>
     </div>
   </div>
 </div>
@@ -1409,20 +1420,14 @@ function setCronoPorDia(n, btn){
 }
 
 function abrirModalConteudoManual(){
-  const sel = document.getElementById('manual-dia');
-  sel.innerHTML = '<option value="">Selecione um dia...</option>';
-  quinzenaDias.forEach((dia,i)=>{
-    const d=new Date(dia.data+'T12:00:00');
-    const fmt=d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
-    sel.innerHTML+=`<option value="${i}">[${dia.tipo==='estudo'?'📚':dia.tipo==='simulado'?'📝':'❌'}] ${fmt}</option>`;
-  });
-  if(!quinzenaDias.length){sel.innerHTML='<option>Inicie a quinzena primeiro (clique em Reiniciar)</option>';}
   const mSel = document.getElementById('manual-materia');
   mSel.innerHTML='<option value="">Selecione...</option>';
   DISC_LIST.forEach(d=>mSel.innerHTML+=`<option value="${d}">${d}</option>`);
   document.getElementById('manual-modulo').innerHTML='<option value="">— selecione a matéria —</option>';
   document.getElementById('manual-conteudo').innerHTML='<option value="">— selecione o módulo —</option>';
   document.getElementById('manual-obs').value='';
+  document.getElementById('manual-exqtd').value='';
+  document.getElementById('manual-exacertos').value='';
   document.getElementById('modal-conteudo-manual').classList.add('open');
 }
 
@@ -1445,28 +1450,44 @@ function onManualModuloChange(){
 }
 
 function adicionarConteudoManual(){
-  const diaIdxStr=document.getElementById('manual-dia').value;
-  const materia=document.getElementById('manual-materia').value;
-  const modulo=document.getElementById('manual-modulo').value;
-  const conteudo=document.getElementById('manual-conteudo').value;
-  const obs=document.getElementById('manual-obs').value.trim();
-  if(diaIdxStr===''||!materia||!modulo||!conteudo){alert('Preencha todos os campos obrigatórios.');return;}
-  const diaIdx=+diaIdxStr;
-  const dia=quinzenaDias[diaIdx];
-  if(!dia){alert('Dia inválido.');return;}
-  const area=MAT_AREA_CRONO[materia]||'CN';
+  const materia  = document.getElementById('manual-materia').value;
+  const modulo   = document.getElementById('manual-modulo').value;
+  const conteudo = document.getElementById('manual-conteudo').value;
+  const obs      = document.getElementById('manual-obs').value.trim();
+  const exQtd    = parseInt(document.getElementById('manual-exqtd').value)||0;
+  const exAcertos= parseInt(document.getElementById('manual-exacertos').value)||0;
+
+  if(!materia||!modulo||!conteudo){alert('Preencha matéria, módulo e conteúdo.');return;}
+  if(exAcertos > exQtd){alert('Acertos não pode ser maior que exercícios feitos.');return;}
+
+  const area = MAT_AREA_CRONO[materia]||'CN';
+
+  // Cria item já concluído sem data — não aparece na grade mas conta no histórico e no dominadosSet
   cronograma.push({
-    diaIdx,sessaoData:dia.data,
-    conteudo,materia,modulo,area,
-    tipo:'estudo',manual:true,obs,
-    concluido:false,exQtd:0,exAcertos:0,
-    revConcluido:false,revExQtd:0,revExAcertos:0
+    diaIdx: null,
+    sessaoData: null,
+    turnoIdx: null,
+    conteudo, materia, modulo, area,
+    tipo: 'estudo',
+    manual: true,
+    avulso: true,
+    obs,
+    concluido: true,
+    exQtd,
+    exAcertos,
+    concluidoEm: new Date().toISOString(),
+    revConcluido: false,
+    revExQtd: 0,
+    revExAcertos: 0,
   });
-  cronograma.sort((a,b)=>(a.sessaoData||'').localeCompare(b.sessaoData||''));
-  document.getElementById('crono-resultado').style.display='block';
+
   closeModal('modal-conteudo-manual');
   salvarCrono();
-  renderCronoDias();
+  // Atualizar estatísticas de exercícios se a aba histórico estiver visível
+  if(document.getElementById('tab-historico-crono')?.classList.contains('active')){
+    renderHistoricoCrono();
+  }
+  setStatus(`✅ "${conteudo}" registrado como concluído.`);
 }
 
 function renderCronograma(){
@@ -3613,6 +3634,9 @@ function renderDiscAnalise(){
     }).join('');
 }
 
+// Cache dos scored para reuso no filtro
+let _sugestaoScored = [];
+
 function renderSugestao(countM, countP, totalErros){
   // Agregar erros por conteúdo
   const conteudoMap={};
@@ -3624,44 +3648,54 @@ function renderSugestao(countM, countP, totalErros){
 
   const scored = Object.values(conteudoMap).map(item=>{
     const {materia,modulo,conteudo,count} = item;
-
-    // 1. Score de erro: combina % na matéria + frequência do conteúdo
-    // Normaliza pela qtd esperada de questões: elimina viés de volume entre Mat/Lin e as demais
     const matNorm = erroNorm(materia, countM[materia]||0);
     const contNormVal = contNorm(materia, count);
     const erroScore = matNorm * 0.5 + contNormVal * 0.5;
-
-    // 2. Pré-requisito: posição na lista do bloco (0=base crítica, fim=avançado)
     const prereq = calcPrereq(materia, modulo, conteudo);
-
-    // 3. Recorrência no ENEM
     const freq = calcRecorrencia(modulo);
-
-    // Score final ponderado
     const score = erroScore * 0.35 + prereq * 0.45 + freq * 0.20;
-
-    // Labels para exibição
     const prereqPct = prereq;
     const prereqLabel = prereqPct >= 0.8 ? 'Base crítica' : prereqPct >= 0.4 ? 'Pré-requisito' : 'Conteúdo avançado';
     const prereqCor = prereqPct >= 0.8 ? '#8B1A1A' : prereqPct >= 0.4 ? '#B8860B' : '#1A3F6B';
     const freqLabel = freq >= 0.8 ? 'Alta recorrência ENEM' : freq >= 0.4 ? 'Recorrência média' : 'Baixa recorrência';
     const freqCor = freq >= 0.8 ? '#1A6B5C' : freq >= 0.4 ? '#B8860B' : '#7A7268';
-
     return {materia,modulo,conteudo,count,score,prereqLabel,prereqCor,freqLabel,freqCor};
   });
 
   scored.sort((a,b)=>b.score-a.score);
-  const top15 = scored.slice(0,25);
+  _sugestaoScored = scored;
 
-  if(!top15.length){
-    document.getElementById('sugestao-conteudos').innerHTML='<p style="color:var(--muted);font-size:13px">Registre erros para gerar o plano de estudos.</p>';
+  // Popular filtro de matéria
+  const sel = document.getElementById('filtro-sugestao-materia');
+  if(sel){
+    const prev = sel.value;
+    const materias = [...new Set(scored.map(s=>s.materia))].sort();
+    sel.innerHTML = '<option value="">Todas as matérias</option>' +
+      materias.map(m=>`<option value="${m}"${m===prev?' selected':''}>${m}</option>`).join('');
+  }
+
+  renderSugestaoFiltrada();
+}
+
+function renderSugestaoFiltrada(){
+  const filtroMateria = document.getElementById('filtro-sugestao-materia')?.value || '';
+  const lista = filtroMateria
+    ? _sugestaoScored.filter(s=>s.materia===filtroMateria)
+    : _sugestaoScored;
+
+  const top = lista.slice(0, 25);
+
+  if(!top.length){
+    document.getElementById('sugestao-conteudos').innerHTML='<p style="color:var(--muted);font-size:13px">' +
+      (filtroMateria ? `Nenhum conteúdo prioritário em ${filtroMateria}.` : 'Registre erros para gerar o plano de estudos.') +
+      '</p>';
     return;
   }
 
-  document.getElementById('sugestao-conteudos').innerHTML = top15.map((item,idx)=>{
+  document.getElementById('sugestao-conteudos').innerHTML = top.map((item,idx)=>{
     const cor = DISC_CORES[item.materia]||'#888';
     const scorePct = Math.round(item.score * 100);
-    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)${idx===14?';border-bottom:none':''}">
+    return `<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)${idx===top.length-1?';border-bottom:none':''}">
       <div style="min-width:26px;height:26px;border-radius:50%;background:${cor};color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${idx+1}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:500;margin-bottom:3px">${item.conteudo}</div>
