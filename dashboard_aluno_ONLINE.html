@@ -1693,15 +1693,15 @@ function cronoGerarCronograma(){
     cronograma
       .filter(c => c.concluido && c.tipo !== 'simulado' && c.tipo !== 'redacao')
       .filter(c => {
-        if(!c.exQtd || c.exQtd === 0) return true; // concluído sem exercícios = considera dominado
+        if(!c.exQtd || c.exQtd === 0) return true;
         return (c.exAcertos / c.exQtd) >= 0.70;
       })
       .filter(c => {
         const dataConc = c.concluidoEm || null;
         const temErroNovo = erros.some(e => {
           if(e.materia !== c.materia || e.conteudo !== c.conteudo) return false;
-          if(!e.criadoEm) return true;   // erro sem data → conservador, considera novo
-          if(!dataConc) return false;     // sessão sem data mas erro tem data → confia no erro (é antigo)
+          if(!e.criadoEm) return true;
+          if(!dataConc) return false;
           return new Date(e.criadoEm) > new Date(dataConc);
         });
         return !temErroNovo;
@@ -1709,13 +1709,20 @@ function cronoGerarCronograma(){
       .map(c => c.materia + '||' + c.modulo + '||' + c.conteudo)
   );
 
+  // Também excluir conteúdos cuja revisão já foi concluída
+  const revisaoConcluida = new Set(
+    cronograma
+      .filter(c => c.revConcluido === true)
+      .map(c => c.materia + '||' + c.modulo + '||' + c.conteudo)
+  );
+
   const fila = Object.values(conteudoMap).filter(item=>{
     const area = MAT_AREA_CRONO[item.materia]||'CN';
     if(areasBloqueadas.includes(area)) return false;
     if(materiasBloqueadas.includes(item.materia)) return false;
-    // Excluir conteúdos já dominados
     const k = item.materia+'||'+item.modulo+'||'+item.conteudo;
     if(dominados.has(k)) return false;
+    if(revisaoConcluida.has(k)) return false; // revisão já feita — não volta para fila
     return true;
   }).map(item=>{
     const {materia,modulo,conteudo,count}=item;
