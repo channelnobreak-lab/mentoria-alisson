@@ -506,6 +506,17 @@ html[data-theme="dark"] .progress-track{background:var(--surface2)!important;}
 html[data-theme="dark"] .med-banner{opacity:.85;}
 html[data-theme="dark"] select option{background:var(--surface2);color:var(--text);}
 
+.cal-grid-wrap{overflow-x:auto;margin-bottom:16px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(130px,1fr));gap:8px;min-width:900px;}
+.cal-day-header{background:linear-gradient(120deg,var(--accent) 0%,var(--accent2,#C4393A) 100%);color:#fff;border-radius:10px 10px 0 0;padding:8px 6px;text-align:center;font-size:11px;font-weight:700;line-height:1.5;}
+.cal-day-col{background:var(--surface2);border-radius:0 0 10px 10px;padding:6px;display:flex;flex-direction:column;gap:6px;min-height:110px;}
+.cal-card{border-radius:8px;padding:8px;color:#fff;font-size:11px;cursor:pointer;line-height:1.4;transition:transform .1s;user-select:none;}
+.cal-card:hover{transform:scale(1.02);}
+.cal-card.concluido{opacity:.55;}
+.cal-card.concluido:hover{transform:none;}
+.cal-card-materia{font-weight:700;margin-bottom:2px;font-size:11px;}
+.cal-card-conteudo{opacity:.92;margin-bottom:4px;font-size:10px;}
+.cal-card-tipo{font-size:9px;text-transform:uppercase;opacity:.85;letter-spacing:.03em;}
 </style>
 </head>
 <body>
@@ -912,6 +923,14 @@ html[data-theme="dark"] select option{background:var(--surface2);color:var(--tex
       </div>
       <div id="crono-cal-grid"></div>
     </div>
+  </div>
+</div>
+
+<!-- MODAL CALENDÁRIO — ações do card -->
+<div class="modal-overlay" id="modal-cal-card">
+  <div class="modal" style="max-width:420px">
+    <div id="modal-cal-card-body"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('modal-cal-card')">Fechar</button></div>
   </div>
 </div>
 
@@ -2079,40 +2098,54 @@ function cronoCalSemana(offset){
   });
 }
 
+function calAbrirAcoes(idx){
+  document.getElementById('modal-cal-card-body').innerHTML = renderCronoCard({...cronograma[idx], idx});
+  document.getElementById('modal-cal-card').classList.add('open');
+}
+
 function renderCronoCalendario(){
   const semana = cronoCalSemana(_cronoCalOffset);
-  const ativos = cronograma
-    .map((item,idx)=>({...item,idx}))
-    .filter(x=>x.tipo!=='historico');
+  const ativos = cronograma.map((item,idx)=>({...item,idx})).filter(x=>x.tipo!=='historico');
   const DIAS_PT = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  const CAL_TIPO_LABEL = {estudo:'📖 Estudo',revisao:'🔄 Revisão',simulado:'📝 Simulado',redacao:'✍️ Redação'};
+
   const d0=new Date(semana[0]+'T12:00:00'), d6=new Date(semana[6]+'T12:00:00');
   const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   const label=document.getElementById('crono-cal-semana-label');
   if(label) label.textContent=`${fmt(d0)} – ${fmt(d6)}`;
+
   const porDia={};
   semana.forEach(data=>{porDia[data]=[];});
   ativos.forEach(item=>{if(porDia[item.sessaoData]) porDia[item.sessaoData].push(item);});
-  const grid=document.getElementById('crono-cal-grid');
-  if(!grid) return;
-  grid.innerHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
-    ${semana.map((data,i)=>{
-      const itens=porDia[data]||[];
-      const d=new Date(data+'T12:00:00');
-      const hj=new Date(); hj.setHours(12,0,0,0);
-      const isHoje=d.toDateString()===hj.toDateString();
-      return `<div style="min-height:120px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-        <div style="background:${isHoje?'var(--accent)':'var(--surface2)'};color:${isHoje?'white':'var(--muted)'};padding:6px 8px;font-size:11px;font-weight:600;text-align:center">
-          ${DIAS_PT[i]}<br>${d.getDate()}/${d.getMonth()+1}
-        </div>
-        <div style="padding:6px;display:flex;flex-direction:column;gap:4px">
-          ${itens.length===0
-            ?`<div style="font-size:10px;color:var(--muted);text-align:center;padding:8px 0">—</div>`
-            :itens.map(item=>renderCronoCard(item)).join('')
-          }
-        </div>
+
+  const hj=new Date(); hj.setHours(12,0,0,0);
+
+  const headers = semana.map((data,i)=>{
+    const d=new Date(data+'T12:00:00');
+    const isHoje=d.toDateString()===hj.toDateString();
+    return `<div class="cal-day-header" style="${isHoje?'background:var(--accent);':''}">
+      ${DIAS_PT[i]}<br>${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})}
+    </div>`;
+  }).join('');
+
+  const cols = semana.map(data=>{
+    const itens=porDia[data]||[];
+    const cards=itens.map(item=>{
+      const cor=DISC_CORES[item.materia]||'#555';
+      const label=CAL_TIPO_LABEL[item.tipo]||'📖 Estudo';
+      return `<div class="cal-card${item.concluido?' concluido':''}" style="background:${cor}"
+        onclick="calAbrirAcoes(${item.idx})"
+        title="Clique para ver as opções">
+        <div class="cal-card-materia">${item.materia} — ${item.modulo}</div>
+        <div class="cal-card-conteudo">${item.conteudo}</div>
+        <div class="cal-card-tipo">${label}${item.concluido?' ✓':''}</div>
       </div>`;
-    }).join('')}
-  </div>`;
+    }).join('');
+    return `<div class="cal-day-col">${cards}</div>`;
+  }).join('');
+
+  const grid=document.getElementById('crono-cal-grid');
+  if(grid) grid.innerHTML=`<div class="cal-grid-wrap"><div class="cal-grid">${headers}${cols}</div></div>`;
 }
 
 function renderCronoDias(){
@@ -2453,9 +2486,6 @@ function renderCronoCard(item){
   if(item.concluido) acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px;color:var(--muted)" onclick="cronoDesfazerConclusao(${item.idx})">↩ Desfazer</button>`;
   if(item.concluido&&isRevisao&&!item.revConcluido) acoesHtml+=`<button class="crono-btn crono-btn-revisao" onclick="cronoAbrirRevisao(${item.idx})">🔄 Revisão feita</button>`;
   if(item.concluido&&isRevisao&&item.revConcluido) acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px;color:var(--muted)" onclick="cronoDesfazerRevisao(${item.idx})">↩ Desfazer revisão</button>`;
-  acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoPuxarProximo(${item.idx})">⏩ Próximo</button>`;
-  if(!item.concluido&&item.tipo!=='simulado'&&item.tipo!=='redacao')
-    acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronoAbrirSplit(${item.idx})" title="Dividir em mais sessões">✂ Dividir</button>`;
   if(item.tipo!=='simulado'&&item.tipo!=='redacao')
     acoesHtml+=`<button class="crono-btn" style="background:var(--surface2);border-color:var(--border2);font-size:10px" onclick="cronometroAbrir('${(item.conteudo||'').replace(/'/g,'\\\'')}')" title="Iniciar cronômetro">⏱ Cronômetro</button>`;
 
@@ -2696,7 +2726,7 @@ function cronoConfirmarConclusao(){
   cronograma[cronoModalIdx].concluidoEm=new Date().toISOString();
   cronograma[cronoModalIdx].exQtd=+document.getElementById('conc-total').value||0;
   cronograma[cronoModalIdx].exAcertos=Math.min(+document.getElementById('conc-acertos').value||0,cronograma[cronoModalIdx].exQtd);
-  closeModal('modal-conclusao'); salvarCrono(); renderCronoDias();
+  closeModal('modal-conclusao'); closeModal('modal-cal-card'); salvarCrono(); renderCronoDias(); if(typeof _cronoModoView!=='undefined'&&_cronoModoView==='calendario') renderCronoCalendario();
 }
 function cronoConfirmarSemExercicios(){
   if(cronoModalIdx===null)return;
@@ -2704,7 +2734,7 @@ function cronoConfirmarSemExercicios(){
   cronograma[cronoModalIdx].concluidoEm=new Date().toISOString();
   cronograma[cronoModalIdx].exQtd=0;
   cronograma[cronoModalIdx].exAcertos=0;
-  closeModal('modal-conclusao'); salvarCrono(); renderCronoDias();
+  closeModal('modal-conclusao'); closeModal('modal-cal-card'); salvarCrono(); renderCronoDias(); if(typeof _cronoModoView!=='undefined'&&_cronoModoView==='calendario') renderCronoCalendario();
 }
 function cronoAbrirRevisao(idx){
   cronoModalIdx=idx;
@@ -2717,7 +2747,7 @@ function cronoConfirmarRevisao(){
   cronograma[cronoModalIdx].revConcluido=true;
   cronograma[cronoModalIdx].revExQtd=+document.getElementById('rev-total').value||0;
   cronograma[cronoModalIdx].revExAcertos=Math.min(+document.getElementById('rev-acertos').value||0,cronograma[cronoModalIdx].revExQtd);
-  closeModal('modal-revisao'); salvarCrono(); renderCronoDias();
+  closeModal('modal-revisao'); closeModal('modal-cal-card'); salvarCrono(); renderCronoDias(); if(typeof _cronoModoView!=='undefined'&&_cronoModoView==='calendario') renderCronoCalendario();
 }
 function cronoPuxarProximo(idxAtual){
   const alocados=new Set(cronograma.filter(c=>c.tipo!=='simulado').map(c=>c.conteudo+'||'+c.materia));
