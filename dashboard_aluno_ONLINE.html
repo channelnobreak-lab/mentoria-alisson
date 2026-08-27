@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script>
+try{
+  var _temaSalvo = localStorage.getItem('mentoria_tema');
+  if(_temaSalvo === 'dark') document.documentElement.setAttribute('data-theme','dark');
+}catch(e){}
+</script>
 
 <!-- SUPABASE SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -147,6 +153,7 @@ async function carregarDadosAluno(user){
   buildSimSelect('err-simulado');
   await carregarCrono();
   carregarMateriasBloqueadas();
+  atualizarIconeTema();
 
   // Carregar outras provas do banco (prioritário sobre localStorage)
   if(alunoData.outras_provas?.length){
@@ -467,6 +474,38 @@ tr:hover td{background:var(--bg);}
   .erros-form-grid{grid-template-columns:1fr 1fr;}
   .erros-list-item,.erros-header-row{grid-template-columns:36px 1fr 1fr 32px;}
 }
+
+html[data-theme="dark"]{
+  --bg:#1A1814;--surface:#242018;--surface2:#2C2820;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --text:#EDE8DF;--muted:#8A8278;
+  --accent-light:#2A1010;--gold-light:#1E1800;--teal-light:#0D1E1A;
+  --blue-light:#0D1525;--purple-light:#151230;--green-light:#0D1E0E;
+}
+html[data-theme="dark"] body{background:var(--bg);color:var(--text);}
+html[data-theme="dark"] .card{background:var(--surface)!important;border-color:var(--border)!important;}
+html[data-theme="dark"] .nav{background:var(--surface)!important;border-color:var(--border2)!important;}
+html[data-theme="dark"] .modal{background:var(--surface)!important;}
+html[data-theme="dark"] .modal-overlay{background:rgba(0,0,0,.7)!important;}
+html[data-theme="dark"] .form-input,html[data-theme="dark"] .form-select,html[data-theme="dark"] .filter-select{background:var(--surface2)!important;color:var(--text)!important;border-color:var(--border2)!important;}
+html[data-theme="dark"] table th{background:var(--surface2)!important;color:var(--muted)!important;}
+html[data-theme="dark"] td{border-color:var(--border)!important;}
+html[data-theme="dark"] tr:hover td{background:var(--surface2);}
+html[data-theme="dark"] .metric-card{background:var(--surface2)!important;border-color:var(--border)!important;}
+html[data-theme="dark"] .nav-btn{color:var(--muted)!important;}
+html[data-theme="dark"] .nav-btn.active{color:var(--accent)!important;}
+html[data-theme="dark"] .btn-sm{background:var(--surface2)!important;color:var(--text)!important;border-color:var(--border2)!important;}
+html[data-theme="dark"] .btn{background:var(--surface2)!important;color:var(--text)!important;border-color:var(--border2)!important;}
+html[data-theme="dark"] .btn.btn-primary{background:var(--accent)!important;color:white!important;border-color:var(--accent)!important;}
+html[data-theme="dark"] .dados-bar,[data-theme="dark"] #dados-bar{background:var(--surface2)!important;border-color:var(--border)!important;}
+html[data-theme="dark"] .section-header{border-color:var(--border)!important;}
+html[data-theme="dark"] .crono-dia-block{background:var(--surface)!important;border-color:var(--border)!important;}
+html[data-theme="dark"] .crono-card{background:var(--surface2)!important;border-color:var(--border)!important;}
+html[data-theme="dark"] .tela-login-aluno,[data-theme="dark"] #tela-login-aluno{background:var(--bg)!important;}
+html[data-theme="dark"] .progress-track{background:var(--surface2)!important;}
+html[data-theme="dark"] .med-banner{opacity:.85;}
+html[data-theme="dark"] select option{background:var(--surface2);color:var(--text);}
+
 </style>
 </head>
 <body>
@@ -533,6 +572,7 @@ tr:hover td{background:var(--bg);}
   <button class="btn-sm" onclick="salvarDados()" title="Salva todos os seus erros num arquivo .json no seu computador">💾 Salvar erros</button>
   <label class="btn-sm" style="cursor:pointer" title="Carrega um arquivo de erros salvo anteriormente">📂 Carregar erros<input type="file" accept=".json" onchange="carregarDados(event)" style="display:none"></label>
   <button class="btn-sm primary" id="btn-exportar-prof" onclick="exportarParaProfessor()" style="display:none" title="Gera um arquivo para enviar ao Prof. Alisson">📤 Exportar para o professor</button>
+  <button class="btn-sm" onclick="alternarTema()" id="btn-tema" title="Alternar tema claro/escuro">🌙</button>
   <button class="btn-sm" id="btn-sair-aluno" onclick="sairAluno()" style="display:none;font-size:11px;color:var(--muted)">↩ Sair</button>
   <span id="dados-status" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
 </div>
@@ -649,8 +689,9 @@ tr:hover td{background:var(--bg);}
 
 <!-- REDAÇÕES -->
 <div id="redacoes" class="section">
-  <div style="background:var(--blue-light);border:1px solid var(--blue);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--blue)">
-    📝 As redações são registradas pelo Prof. Alisson Pedrosa.
+  <div class="section-header" style="margin-bottom:14px">
+    <div class="section-title" style="margin-bottom:0">Redações</div>
+    <button class="btn btn-primary" onclick="abrirRedacaoAlunoModal()">+ Registrar redação</button>
   </div>
   <div class="metric-grid" id="metrics-redacao"></div>
   <div class="card">
@@ -664,7 +705,7 @@ tr:hover td{background:var(--bg);}
   </div>
   <div class="section-title" style="margin-bottom:14px">Histórico de Redações</div>
   <div class="card" style="padding:0"><div class="table-wrap"><table>
-    <thead><tr><th>#</th><th>Tema</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th><th>Nota</th><th></th></tr></thead>
+    <thead><tr><th></th><th>#</th><th>Tema</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th><th>Nota</th><th></th></tr></thead>
     <tbody id="redacoes-body"></tbody>
   </table></div></div>
 </div>
@@ -854,12 +895,24 @@ tr:hover td{background:var(--bg);}
   <div id="crono-resultado" style="display:none">
     <div class="section-header" style="margin-bottom:14px">
       <div class="section-title" id="crono-titulo">Cronograma</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-sm" onclick="cronoGerarCronograma()">↺ Regerar automático</button>
-        <button class="btn-sm" onclick="cronoBaixarPDF()" style="background:var(--accent);color:#fff;border-color:var(--accent)">📄 Baixar PDF</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn-sm" id="crono-btn-view-lista" onclick="cronoSetModoView('lista')" style="background:var(--accent);color:white;border-color:var(--accent)">📋 Lista</button>
+        <button class="btn-sm" id="crono-btn-view-cal" onclick="cronoSetModoView('calendario')">📅 Calendário</button>
+        <button class="btn-sm" onclick="cronoGerarCronograma()">↺ Regerar</button>
+        <button class="btn-sm" onclick="cronoBaixarPDF()" style="background:var(--accent);color:#fff;border-color:var(--accent)">📄 PDF</button>
       </div>
     </div>
+    <!-- Vista lista -->
     <div id="crono-dias-container"></div>
+    <!-- Vista calendário -->
+    <div id="crono-cal-container" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <button class="btn-sm" onclick="cronoCalNavegar(-1)">◀</button>
+        <span id="crono-cal-semana-label" style="font-size:13px;font-weight:600;color:var(--text)"></span>
+        <button class="btn-sm" onclick="cronoCalNavegar(1)">▶</button>
+      </div>
+      <div id="crono-cal-grid"></div>
+    </div>
   </div>
 </div>
 
@@ -977,6 +1030,11 @@ tr:hover td{background:var(--bg);}
     <div class="med-icon">📊</div>
     <div class="med-text"><strong>Estatísticas de Exercícios</strong><p>Aproveitamento nos exercícios feitos durante o cronograma.</p></div>
   </div>
+  <div style="margin-bottom:14px">
+    <select id="estat-filtro-materia" onchange="renderEstatisticas()" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);width:100%;max-width:260px">
+      <option value="">Todas as matérias</option>
+    </select>
+  </div>
   <div id="estat-content"></div>
 </div>
 
@@ -986,7 +1044,34 @@ tr:hover td{background:var(--bg);}
     <div class="med-icon">✅</div>
     <div class="med-text"><strong>Histórico de Estudos</strong><p>Todos os conteúdos estudados e revisados nesta quinzena.</p></div>
   </div>
+  <div style="margin-bottom:14px">
+    <select id="hist-filtro-materia" onchange="renderHistoricoCrono()" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);width:100%;max-width:260px">
+      <option value="">Todas as matérias</option>
+    </select>
+  </div>
   <div id="hist-content"></div>
+</div>
+
+
+<!-- MODAL: ALUNO REGISTRA REDAÇÃO -->
+<div class="modal-overlay" id="modal-redacao-aluno">
+  <div class="modal">
+    <div class="modal-title">Registrar redação</div>
+    <div class="form-row"><label class="form-label">Tema</label><input class="form-input" id="reda-tema" type="text" placeholder="Ex: Desafios da mobilidade urbana no Brasil"></div>
+    <label class="form-label">Notas por competência</label>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:6px">
+      <div><label class="form-label">C1</label><input class="form-input reda-c" id="reda-c1" type="number" step="40" min="0" max="200" oninput="redaAtualizarNotaPreview()"></div>
+      <div><label class="form-label">C2</label><input class="form-input reda-c" id="reda-c2" type="number" step="40" min="0" max="200" oninput="redaAtualizarNotaPreview()"></div>
+      <div><label class="form-label">C3</label><input class="form-input reda-c" id="reda-c3" type="number" step="40" min="0" max="200" oninput="redaAtualizarNotaPreview()"></div>
+      <div><label class="form-label">C4</label><input class="form-input reda-c" id="reda-c4" type="number" step="40" min="0" max="200" oninput="redaAtualizarNotaPreview()"></div>
+      <div><label class="form-label">C5</label><input class="form-input reda-c" id="reda-c5" type="number" step="40" min="0" max="200" oninput="redaAtualizarNotaPreview()"></div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Nota total: <strong id="reda-nota-preview" style="color:var(--text)">0</strong></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-redacao-aluno')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarRedacaoAluno()">Salvar</button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL RESUMO IA -->
@@ -1957,6 +2042,85 @@ async function cronoBaixarPDF(){
 }
 
 // ── Renderizar cronograma ────────────────────────────────────
+// ── Vista calendário do cronograma ───────────────────────────
+let _cronoModoView = 'lista';
+let _cronoCalOffset = 0;
+
+function cronoSetModoView(modo){
+  _cronoModoView = modo;
+  const btnLista = document.getElementById('crono-btn-view-lista');
+  const btnCal   = document.getElementById('crono-btn-view-cal');
+  const lista    = document.getElementById('crono-dias-container');
+  const cal      = document.getElementById('crono-cal-container');
+  if(!lista||!cal) return;
+  if(modo === 'lista'){
+    lista.style.display=''; cal.style.display='none';
+    if(btnLista){ btnLista.style.background='var(--accent)'; btnLista.style.color='white'; btnLista.style.borderColor='var(--accent)'; }
+    if(btnCal){ btnCal.style.background=''; btnCal.style.color=''; btnCal.style.borderColor=''; }
+  } else {
+    lista.style.display='none'; cal.style.display='';
+    if(btnCal){ btnCal.style.background='var(--accent)'; btnCal.style.color='white'; btnCal.style.borderColor='var(--accent)'; }
+    if(btnLista){ btnLista.style.background=''; btnLista.style.color=''; btnLista.style.borderColor=''; }
+    renderCronoCalendario();
+  }
+}
+
+function cronoCalNavegar(dir){ _cronoCalOffset += dir; renderCronoCalendario(); }
+
+function cronoCalSemana(offset){
+  const hoje = new Date();
+  const dia = hoje.getDay();
+  const diffLun = (dia===0 ? -6 : 1 - dia);
+  const lun = new Date(hoje);
+  lun.setDate(hoje.getDate() + diffLun + offset*7);
+  return Array.from({length:7},(_,i)=>{
+    const d = new Date(lun); d.setDate(lun.getDate()+i);
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  });
+}
+
+function renderCronoCalendario(){
+  const semana = cronoCalSemana(_cronoCalOffset);
+  const ativos = cronograma.filter(x=>x.tipo!=='historico');
+  const DIAS_PT = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  const d0=new Date(semana[0]+'T12:00:00'), d6=new Date(semana[6]+'T12:00:00');
+  const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const label=document.getElementById('crono-cal-semana-label');
+  if(label) label.textContent=`${fmt(d0)} – ${fmt(d6)}`;
+  const porDia={};
+  semana.forEach(data=>{porDia[data]=[];});
+  ativos.forEach(item=>{if(porDia[item.sessaoData]) porDia[item.sessaoData].push(item);});
+  const grid=document.getElementById('crono-cal-grid');
+  if(!grid) return;
+  grid.innerHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+    ${semana.map((data,i)=>{
+      const itens=porDia[data]||[];
+      const d=new Date(data+'T12:00:00');
+      const hj=new Date(); hj.setHours(12,0,0,0);
+      const isHoje=d.toDateString()===hj.toDateString();
+      return `<div style="min-height:120px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+        <div style="background:${isHoje?'var(--accent)':'var(--surface2)'};color:${isHoje?'white':'var(--muted)'};padding:6px 8px;font-size:11px;font-weight:600;text-align:center">
+          ${DIAS_PT[i]}<br>${d.getDate()}/${d.getMonth()+1}
+        </div>
+        <div style="padding:6px;display:flex;flex-direction:column;gap:4px">
+          ${itens.length===0
+            ?`<div style="font-size:10px;color:var(--muted);text-align:center;padding:8px 0">—</div>`
+            :itens.map(item=>{
+              const cor=DISC_CORES[item.materia]||'var(--accent)';
+              const concl=item.concluido?'opacity:.5;text-decoration:line-through':'';
+              return `<div style="background:${cor}18;border-left:3px solid ${cor};border-radius:4px;padding:4px 6px;font-size:10px;${concl}" title="${item.conteudo}">
+                <div style="font-weight:600;color:${cor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.materia}</div>
+                <div style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.conteudo}</div>
+              </div>`;
+            }).join('')
+          }
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 function renderCronoDias(){
   const container=document.getElementById('crono-dias-container');
   if(!cronograma.length){container.innerHTML='<p style="color:var(--muted);font-size:13px">Clique em "Gerar cronograma" para distribuir os conteúdos.</p>';return;}
@@ -2588,6 +2752,22 @@ const _store = {};
 function _setItem(k,v){try{localStorage.setItem(k,v);}catch(e){_store[k]=v;}}
 function _getItem(k){try{return localStorage.getItem(k);}catch(e){return _store[k]||null;}}
 
+
+// ── Tema claro/escuro ─────────────────────────────────────────
+function alternarTema(){
+  const atual = document.documentElement.getAttribute('data-theme');
+  const novo = atual === 'dark' ? 'light' : 'dark';
+  if(novo === 'dark') document.documentElement.setAttribute('data-theme','dark');
+  else document.documentElement.removeAttribute('data-theme');
+  try{ localStorage.setItem('mentoria_tema', novo); }catch(e){}
+  atualizarIconeTema();
+}
+function atualizarIconeTema(){
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const btn = document.getElementById('btn-tema');
+  if(btn) btn.textContent = dark ? '☀️' : '🌙';
+}
+
 // ── Bloqueio de matérias pelo aluno ──────────────────────────
 function getMateriasBloqueadas(){
   return config.materiasBloqueadas || [];
@@ -3211,6 +3391,12 @@ function renderPrevisaoChart(){
 // REDAÇÕES
 // ══════════════════════════════════════════════════════════════
 function renderRedacoes(){
+  if(!redacoes.length){
+    document.getElementById('metrics-redacao').innerHTML='';
+    document.getElementById('redacoes-body').innerHTML='<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:20px">Nenhuma redação registrada ainda.</td></tr>';
+    destroyChart('redEvolucao');
+    return;
+  }
   const notas=redacoes.map(r=>r.nota);
   document.getElementById('metrics-redacao').innerHTML=`
     <div class="metric-card"><div class="metric-label">Nota média</div><div class="metric-value" style="color:var(--purple)">${Math.round(avg(notas))}</div></div>
@@ -3229,17 +3415,69 @@ function renderRedacoes(){
   });
   const tb=document.getElementById('redacoes-body'); tb.innerHTML='';
   redacoes.forEach((r,i)=>{
-    tb.innerHTML+=`<tr><td style="color:var(--muted)">${i+1}</td>
+    const c=v=>(v===null||v===undefined)?'—':v;
+    tb.innerHTML+=`<tr draggable="true"
+      ondragstart="redaDragStart(event,${i})"
+      ondragover="event.preventDefault();this.style.outline='2px dashed var(--accent)'"
+      ondragleave="this.style.outline=''"
+      ondrop="redaDrop(event,${i});this.style.outline=''">
+      <td style="cursor:grab;color:var(--muted);white-space:nowrap">⠿</td>
+      <td style="color:var(--muted)">${i+1}</td>
       <td style="max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.tema}">${r.tema}</td>
-      <td>${r.c1}</td><td>${r.c2}</td><td>${r.c3}</td><td>${r.c4}</td><td>${r.c5}</td>
+      <td>${c(r.c1)}</td><td>${c(r.c2)}</td><td>${c(r.c3)}</td><td>${c(r.c4)}</td><td>${c(r.c5)}</td>
       <td><span class="pill ${notaClass(r.nota)}">${r.nota}</span></td>
       <td><button style="background:none;border:none;cursor:pointer;color:var(--muted)" onclick="excluirRedacao(${i})">✕</button></td>
     </tr>`;
   });
 }
 
-// ══════════════════════════════════════════════════════════════
-// SIMULADOS
+// Drag & drop redações
+let _redaDragIdx = null;
+function redaDragStart(e, idx){ _redaDragIdx=idx; e.dataTransfer.effectAllowed='move'; }
+function redaDrop(e, destIdx){
+  e.preventDefault();
+  if(_redaDragIdx===null||_redaDragIdx===destIdx){_redaDragIdx=null;return;}
+  const [movida]=redacoes.splice(_redaDragIdx,1);
+  redacoes.splice(destIdx,0,movida);
+  _redaDragIdx=null;
+  salvarRedacoesAluno();
+  renderRedacoes();
+}
+
+// Registrar redação pelo aluno
+function abrirRedacaoAlunoModal(){
+  document.getElementById('reda-tema').value='';
+  ['c1','c2','c3','c4','c5'].forEach(f=>document.getElementById('reda-'+f).value='');
+  redaAtualizarNotaPreview();
+  document.getElementById('modal-redacao-aluno').classList.add('open');
+}
+function redaAtualizarNotaPreview(){
+  const soma=['c1','c2','c3','c4','c5'].reduce((s,f)=>s+(+document.getElementById('reda-'+f).value||0),0);
+  document.getElementById('reda-nota-preview').textContent=soma;
+}
+function salvarRedacaoAluno(){
+  const tema=document.getElementById('reda-tema').value.trim();
+  if(!tema){alert('Informe o tema.');return;}
+  const c1=+document.getElementById('reda-c1').value||0;
+  const c2=+document.getElementById('reda-c2').value||0;
+  const c3=+document.getElementById('reda-c3').value||0;
+  const c4=+document.getElementById('reda-c4').value||0;
+  const c5=+document.getElementById('reda-c5').value||0;
+  const nota=c1+c2+c3+c4+c5;
+  redacoes.push({tema,nota,c1,c2,c3,c4,c5,origem:'aluno'});
+  closeModal('modal-redacao-aluno');
+  salvarRedacoesAluno();
+  renderRedacoes();
+}
+function salvarRedacoesAluno(){
+  try{_setItem('redacoes_'+config.nome, JSON.stringify(redacoes));}catch(e){}
+  if(supaMode&&supaAlunoId){
+    supa.from('alunos').update({redacoes}).eq('id',supaAlunoId).then(({error})=>{
+      if(error) console.warn('Erro ao salvar redação:',error.message);
+    });
+  }
+}
+function excluirRedacao(i){if(!confirm('Excluir?'))return;redacoes.splice(i,1);salvarRedacoesAluno();renderRedacoes();}
 // ══════════════════════════════════════════════════════════════
 function renderSimulados(){
   buildSimSelect('err-simulado');
@@ -4171,10 +4409,23 @@ function addEnemHistorico(){ return; }
 // ══════════════════════════════════════════════════════════════
 function renderEstatisticas(){
   const el=document.getElementById('estat-content');
-  const itens=cronograma.filter(c=>c.concluido&&c.exQtd>0);
-  const revis=cronograma.filter(c=>c.revConcluido&&c.revExQtd>0);
+
+  // Popular filtro de matéria
+  const selFiltro = document.getElementById('estat-filtro-materia');
+  if(selFiltro && !selFiltro.dataset.init){
+    selFiltro.dataset.init='1';
+    selFiltro.innerHTML = '<option value="">Todas as matérias</option>' +
+      DISC_LIST.map(m=>`<option value="${m}">${m}</option>`).join('');
+  }
+  const filtroMateria = selFiltro?.value || '';
+
+  const itensBase=cronograma.filter(c=>c.concluido&&c.exQtd>0);
+  const revisBase=cronograma.filter(c=>c.revConcluido&&c.revExQtd>0);
+  const itens = filtroMateria ? itensBase.filter(c=>c.materia===filtroMateria) : itensBase;
+  const revis = filtroMateria ? revisBase.filter(c=>c.materia===filtroMateria) : revisBase;
+
   if(!itens.length&&!revis.length){
-    el.innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Nenhum exercício registrado ainda. Conclua conteúdos no cronograma para ver as estatísticas.</p></div>';
+    el.innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Nenhum exercício registrado ainda' + (filtroMateria?` em ${filtroMateria}`:'') + '.</p></div>';
     return;
   }
   // Métricas globais
@@ -4241,10 +4492,23 @@ function renderEstatisticas(){
 // ══════════════════════════════════════════════════════════════
 function renderHistorico(){
   const el=document.getElementById('hist-content');
-  const estudados=cronograma.filter(c=>c.concluido&&c.tipo!=='simulado');
-  const revisados=cronograma.filter(c=>c.revConcluido);
+
+  // Popular filtro de matéria
+  const selFiltro = document.getElementById('hist-filtro-materia');
+  if(selFiltro && !selFiltro.dataset.init){
+    selFiltro.dataset.init='1';
+    selFiltro.innerHTML = '<option value="">Todas as matérias</option>' +
+      DISC_LIST.map(m=>`<option value="${m}">${m}</option>`).join('');
+  }
+  const filtroMateria = selFiltro?.value || '';
+
+  const estudadosBase=cronograma.filter(c=>c.concluido&&c.tipo!=='simulado');
+  const revisadosBase=cronograma.filter(c=>c.revConcluido);
+  const estudados = filtroMateria ? estudadosBase.filter(c=>c.materia===filtroMateria) : estudadosBase;
+  const revisados = filtroMateria ? revisadosBase.filter(c=>c.materia===filtroMateria) : revisadosBase;
+
   if(!estudados.length){
-    el.innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Nenhum conteúdo concluído ainda.</p></div>';
+    el.innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Nenhum conteúdo concluído ainda'+(filtroMateria?` em ${filtroMateria}`:'')+'.</p></div>';
     return;
   }
   el.innerHTML=`
@@ -4253,7 +4517,7 @@ function renderHistorico(){
       ${estudados.map(c=>{
         const p=c.exQtd?Math.round(c.exAcertos/c.exQtd*100):null;
         const cor=DISC_CORES[c.materia]||'#888';
-        const d=new Date(c.sessaoData+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+        const d=c.sessaoData?new Date(c.sessaoData+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'avulso';
         return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
           <span style="font-size:18px">✅</span>
           <div style="flex:1;min-width:0">
@@ -4268,7 +4532,7 @@ function renderHistorico(){
       <div class="card-title">Revisões feitas (${revisados.length})</div>
       ${revisados.map(c=>{
         const p=c.revExQtd?Math.round(c.revExAcertos/c.revExQtd*100):null;
-        const d=new Date(c.sessaoData+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+        const d=c.sessaoData?new Date(c.sessaoData+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'avulso';
         return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
           <span style="font-size:18px">🔄</span>
           <div style="flex:1;min-width:0">
@@ -4280,6 +4544,8 @@ function renderHistorico(){
       }).join('')}
     </div>`:''}`;
 }
+// Alias usado em outros lugares
+function renderHistoricoCrono(){ renderHistorico(); }
 
 // ══════════════════════════════════════════════════════════════
 // RESUMO IA — API Anthropic
