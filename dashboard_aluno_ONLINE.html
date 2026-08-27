@@ -572,7 +572,6 @@ html[data-theme="dark"] select option{background:var(--surface2);color:var(--tex
   <button class="btn-sm" onclick="salvarDados()" title="Salva todos os seus erros num arquivo .json no seu computador">💾 Salvar erros</button>
   <label class="btn-sm" style="cursor:pointer" title="Carrega um arquivo de erros salvo anteriormente">📂 Carregar erros<input type="file" accept=".json" onchange="carregarDados(event)" style="display:none"></label>
   <button class="btn-sm primary" id="btn-exportar-prof" onclick="exportarParaProfessor()" style="display:none" title="Gera um arquivo para enviar ao Prof. Alisson">📤 Exportar para o professor</button>
-  <button class="btn-sm" onclick="alternarTema()" id="btn-tema" title="Alternar tema claro/escuro">🌙</button>
   <button class="btn-sm" id="btn-sair-aluno" onclick="sairAluno()" style="display:none;font-size:11px;color:var(--muted)">↩ Sair</button>
   <span id="dados-status" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
 </div>
@@ -2082,7 +2081,9 @@ function cronoCalSemana(offset){
 
 function renderCronoCalendario(){
   const semana = cronoCalSemana(_cronoCalOffset);
-  const ativos = cronograma.filter(x=>x.tipo!=='historico');
+  const ativos = cronograma
+    .map((item,idx)=>({...item,idx}))
+    .filter(x=>x.tipo!=='historico');
   const DIAS_PT = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
   const d0=new Date(semana[0]+'T12:00:00'), d6=new Date(semana[6]+'T12:00:00');
   const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
@@ -2106,14 +2107,7 @@ function renderCronoCalendario(){
         <div style="padding:6px;display:flex;flex-direction:column;gap:4px">
           ${itens.length===0
             ?`<div style="font-size:10px;color:var(--muted);text-align:center;padding:8px 0">—</div>`
-            :itens.map(item=>{
-              const cor=DISC_CORES[item.materia]||'var(--accent)';
-              const concl=item.concluido?'opacity:.5;text-decoration:line-through':'';
-              return `<div style="background:${cor}18;border-left:3px solid ${cor};border-radius:4px;padding:4px 6px;font-size:10px;${concl}" title="${item.conteudo}">
-                <div style="font-weight:600;color:${cor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.materia}</div>
-                <div style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.conteudo}</div>
-              </div>`;
-            }).join('')
+            :itens.map(item=>renderCronoCard(item)).join('')
           }
         </div>
       </div>`;
