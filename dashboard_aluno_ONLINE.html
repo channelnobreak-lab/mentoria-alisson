@@ -3496,8 +3496,8 @@ function salvarRedacaoAluno(){
 function salvarRedacoesAluno(){
   try{_setItem('redacoes_'+config.nome, JSON.stringify(redacoes));}catch(e){}
   if(supaMode && supaAlunoId){
-    // Apaga as existentes e reinsere — mesmo padrão do professor
-    supa.from('redacoes').delete().eq('aluno_id', supaAlunoId).then(()=>{
+    supa.from('redacoes').delete().eq('aluno_id', supaAlunoId).then(({error:delErr})=>{
+      if(delErr){ console.error('Erro ao deletar redações:', delErr); return; }
       if(!redacoes.length) return;
       const rows = redacoes.map(r=>({
         aluno_id: supaAlunoId,
@@ -3505,7 +3505,8 @@ function salvarRedacoesAluno(){
         c1: r.c1||0, c2: r.c2||0, c3: r.c3||0, c4: r.c4||0, c5: r.c5||0
       }));
       supa.from('redacoes').insert(rows).then(({error})=>{
-        if(error) console.warn('Erro ao salvar redações:', error.message);
+        if(error){ console.error('Erro ao inserir redações:', error); setStatus('⚠ Erro ao salvar redação: '+error.message); }
+        else setStatus('✅ Redação salva.');
       });
     });
   }
