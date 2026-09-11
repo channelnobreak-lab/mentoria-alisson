@@ -3495,9 +3495,18 @@ function salvarRedacaoAluno(){
 }
 function salvarRedacoesAluno(){
   try{_setItem('redacoes_'+config.nome, JSON.stringify(redacoes));}catch(e){}
-  if(supaMode&&supaAlunoId){
-    supa.from('alunos').update({redacoes}).eq('id',supaAlunoId).then(({error})=>{
-      if(error) console.warn('Erro ao salvar redação:',error.message);
+  if(supaMode && supaAlunoId){
+    // Apaga as existentes e reinsere — mesmo padrão do professor
+    supa.from('redacoes').delete().eq('aluno_id', supaAlunoId).then(()=>{
+      if(!redacoes.length) return;
+      const rows = redacoes.map(r=>({
+        aluno_id: supaAlunoId,
+        tema: r.tema,
+        c1: r.c1||0, c2: r.c2||0, c3: r.c3||0, c4: r.c4||0, c5: r.c5||0
+      }));
+      supa.from('redacoes').insert(rows).then(({error})=>{
+        if(error) console.warn('Erro ao salvar redações:', error.message);
+      });
     });
   }
 }
