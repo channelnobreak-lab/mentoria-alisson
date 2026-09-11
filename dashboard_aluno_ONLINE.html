@@ -122,7 +122,7 @@ async function carregarDadosAluno(user){
     .map(s=>({nome:s.nome,bio:s.bio,qui:s.qui,fis:s.fis,his:s.his,geo:s.geo,fil:s.fil,soc:s.soc,lin:s.lin,mat:s.mat}));
 
   redacoes = (alunoData.redacoes||[])
-    .map(r=>({tema:r.tema,c1:r.c1,c2:r.c2,c3:r.c3,c4:r.c4,c5:r.c5,nota:r.nota}));
+    .map(r=>({tema:r.tema,c1:r.c1||0,c2:r.c2||0,c3:r.c3||0,c4:r.c4||0,c5:r.c5||0,nota:(r.nota||(r.c1||0)+(r.c2||0)+(r.c3||0)+(r.c4||0)+(r.c5||0))}));
 
   erros = (alunoData.erros||[])
     .map(e=>({questao:e.questao,simuladoIdx:e.simulado_idx,simulado:e.simulado,materia:e.materia,modulo:e.modulo,conteudo:e.conteudo,obs:e.obs,criadoEm:e.criado_em||null}));
